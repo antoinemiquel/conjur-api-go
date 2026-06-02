@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - `CredentialStorageMode` with `ReadWrite` and `ReadOnly` settings, configurable via `CONJUR_CREDENTIAL_STORAGE_MODE` and `WithDefaultCredentialStorageMode()` (CNJR-13714)
 - `CONJUR_KEYCHAIN_NAMESPACE` and `keychain_namespace` config for per-invocation keyring isolation via namespaced service names (CNJR-13715)
+- Add support for `authn-ldap` groups and users mappings management (create, show, list, delete). CNJR-14197
 
 ## [0.14.1] - 2026-05-22
 
