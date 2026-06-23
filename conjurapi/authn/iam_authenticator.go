@@ -12,9 +12,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 
 	"github.com/cyberark/conjur-api-go/conjurapi/logging"
 )
+
+// IAMCredentials holds explicit AWS credentials for authn-iam authentication.
+// When provided, these are used instead of the ambient AWS SDK credential chain
+// (environment variables, EC2 instance metadata, IRSA, etc.).
+type IAMCredentials struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string // optional
+}
 
 // IAMAuthenticator handles authentication to Conjur using the authn-iam authenticator.
 // It uses AWS SDK to sign a request to the AWS STS GetCallerIdentity endpoint and sends the signed headers to Conjur
@@ -34,11 +44,32 @@ func (a *IAMAuthenticator) NeedsTokenRefresh() bool {
 	return false
 }
 
-// IAMAuthenticateHeaders fetches AWS credentials and signs a request to the AWS STS GetCallerIdentity endpoint.
+// IAMAuthenticateHeaders fetches AWS credentials using the ambient AWS SDK credential chain
+// and signs a request to the AWS STS GetCallerIdentity endpoint.
 // These headers can then be sent to Conjur to authenticate using the authn-iam authenticator.
 func IAMAuthenticateHeaders() ([]byte, error) {
+	return IAMAuthenticateHeadersWithCredentials(nil)
+}
+
+// IAMAuthenticateHeadersWithCredentials is like IAMAuthenticateHeaders but uses the supplied
+// explicit AWS credentials instead of the ambient credential chain.
+func IAMAuthenticateHeadersWithCredentials(creds *IAMCredentials) ([]byte, error) {
+	return iamAuthenticateHeaders(creds)
+}
+
+func iamAuthenticateHeaders(creds *IAMCredentials) ([]byte, error) {
 	ctx := context.TODO()
-	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+
+	var optFns []func(*awsconfig.LoadOptions) error
+	if creds != nil {
+		optFns = append(optFns, awsconfig.WithCredentialsProvider(
+			aws.NewCredentialsCache(
+				credentials.NewStaticCredentialsProvider(creds.AccessKeyID, creds.SecretAccessKey, creds.SessionToken),
+			),
+		))
+	}
+
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, optFns...)
 	if err != nil {
 		logging.ApiLog.Errorf("Error loading AWS config: %v", err)
 		return nil, err
@@ -53,7 +84,7 @@ func IAMAuthenticateHeaders() ([]byte, error) {
 		return nil, err
 	}
 
-	creds, err := cfg.Credentials.Retrieve(ctx)
+	awsCreds, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		logging.ApiLog.Errorf("Error loading AWS credentials: %v", err)
 		return nil, err
@@ -62,7 +93,7 @@ func IAMAuthenticateHeaders() ([]byte, error) {
 	// Sign the request
 	signer := v4.NewSigner()
 	// NOTE: The random-looking string is a hash of an empty payload which is necessary for the correct signature
-	err = signer.SignHTTP(ctx, creds, request, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "sts", cfg.Region, time.Now().UTC())
+	err = signer.SignHTTP(ctx, awsCreds, request, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "sts", cfg.Region, time.Now().UTC())
 	if err != nil {
 		logging.ApiLog.Errorf("Error signing HTTP request: %v", err)
 		return nil, err

@@ -326,7 +326,13 @@ func (c *Client) OidcAuthenticate(code, nonce, code_verifier string) ([]byte, er
 }
 
 func (c *Client) IAMAuthenticate() ([]byte, error) {
-	signedHeaders, err := authn.IAMAuthenticateHeaders()
+	return c.IAMAuthenticateWithCredentials(nil)
+}
+
+// IAMAuthenticateWithCredentials is like IAMAuthenticate but uses the supplied explicit
+// AWS credentials instead of the ambient credential chain.
+func (c *Client) IAMAuthenticateWithCredentials(creds *authn.IAMCredentials) ([]byte, error) {
+	signedHeaders, err := authn.IAMAuthenticateHeadersWithCredentials(creds)
 	if err != nil {
 		return nil, err
 	}
