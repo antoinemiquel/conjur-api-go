@@ -108,6 +108,18 @@ func Test_defaultEnvironment(t *testing.T) {
 		name: "Secrets Manager SaaS",
 		url:  "https://tenant.secretsmgr.cyberark.cloud",
 		want: EnvironmentSaaS,
+	}, {
+		name: "Edge with /api base path",
+		url:  "https://edge.customer.example.com/api",
+		want: EnvironmentSaaS,
+	}, {
+		name: "Edge with /api base path and trailing slash",
+		url:  "https://edge.customer.example.com/api/",
+		want: EnvironmentSaaS,
+	}, {
+		name: "Self-hosted without /api base path",
+		url:  "https://conjur.example.com",
+		want: EnvironmentSH,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

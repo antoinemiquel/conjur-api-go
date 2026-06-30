@@ -34,7 +34,7 @@ type BranchFilter struct {
 }
 
 func (c *ClientV2) CreateBranch(branch Branch) (*Branch, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(MinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return nil, fmt.Errorf(NotSupportedInOldVersions, "Branch API", MinVersion)
 	}
 
@@ -63,7 +63,7 @@ func (c *ClientV2) CreateBranch(branch Branch) (*Branch, error) {
 }
 
 func (c *ClientV2) ReadBranch(identifier string) (*Branch, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(MinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return nil, fmt.Errorf(NotSupportedInOldVersions, "Branch API", MinVersion)
 	}
 
@@ -93,7 +93,7 @@ func (c *ClientV2) ReadBranch(identifier string) (*Branch, error) {
 
 func (c *ClientV2) ReadBranches(filter *BranchFilter) (BranchesResponse, error) {
 	branchResp := BranchesResponse{}
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(MinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return branchResp, fmt.Errorf(NotSupportedInOldVersions, "Branch API", MinVersion)
 	}
 
@@ -118,7 +118,7 @@ func (c *ClientV2) ReadBranches(filter *BranchFilter) (BranchesResponse, error) 
 }
 
 func (c *ClientV2) UpdateBranch(branch Branch) ([]byte, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(MinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return nil, fmt.Errorf(NotSupportedInOldVersions, "Branch API", MinVersion)
 	}
 	req, err := c.UpdateBranchRequest(branch.Name, branch.Owner, branch.Annotations)
@@ -135,7 +135,7 @@ func (c *ClientV2) UpdateBranch(branch Branch) ([]byte, error) {
 }
 
 func (c *ClientV2) DeleteBranch(identifier string) ([]byte, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(MinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return nil, fmt.Errorf(NotSupportedInOldVersions, "Branch API", MinVersion)
 	}
 
@@ -288,7 +288,7 @@ func (b Branch) Validate() error {
 
 func (c *ClientV2) branchURL(identifier string) string {
 	account := c.config.Account
-	if isConjurCloudURL(c.config.ApplianceURL) {
+	if c.config.IsSaaS() {
 		account = ""
 	}
 	if identifier == "" {
@@ -299,7 +299,7 @@ func (c *ClientV2) branchURL(identifier string) string {
 
 func (c *ClientV2) branchesURL() string {
 	account := c.config.Account
-	if isConjurCloudURL(c.config.ApplianceURL) {
+	if c.config.IsSaaS() {
 		account = ""
 	}
 	return makeRouterURL(c.config.ApplianceURL, "branches", account).String()

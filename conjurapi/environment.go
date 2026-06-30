@@ -73,8 +73,23 @@ func defaultEnvironment(url string, showLog bool) EnvironmentType {
 		}
 		return EnvironmentSaaS
 	}
+	// Edge runs under arbitrary hostnames that don't match the Conjur Cloud URL
+	// patterns, but exposes the same V2 API surface behind an '/api' base path.
+	// Treat any '/api'-suffixed base URL as SaaS so V2 endpoints are enabled.
+	if hasAPIBasePath(url) {
+		if showLog {
+			logging.ApiLog.Info("Detected '/api' base path, setting 'Environment' to 'saas'")
+		}
+		return EnvironmentSaaS
+	}
 	if showLog {
 		logging.ApiLog.Info("'Environment' not specified, setting to 'self-hosted'")
 	}
 	return EnvironmentSH
+}
+
+// hasAPIBasePath reports whether the base URL's path ends with '/api', which is
+// the convention used by Edge deployments fronting the V2 API.
+func hasAPIBasePath(baseURL string) bool {
+	return strings.HasSuffix(strings.TrimSuffix(baseURL, "/"), "/api")
 }

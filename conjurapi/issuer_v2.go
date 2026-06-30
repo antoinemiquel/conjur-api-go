@@ -107,7 +107,7 @@ func (c *ClientV2) CertificateIssueRequest(issuerName string, issue Issue) (*htt
 }
 
 func (c *ClientV2) CertificateIssue(issuerName string, issue Issue) (*CertificateResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) {
+	if !c.config.IsSaaS() {
 		return nil, fmt.Errorf("Issue API %s", NotSupportedInConjurEnterprise)
 	}
 
@@ -163,7 +163,7 @@ func (c *ClientV2) CertificateSignRequest(issuerName string, sign Sign) (*http.R
 }
 
 func (c *ClientV2) CertificateSign(issuerName string, sign Sign) (*CertificateResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) {
+	if !c.config.IsSaaS() {
 		return nil, fmt.Errorf("Issue API %s", NotSupportedInConjurEnterprise)
 	}
 

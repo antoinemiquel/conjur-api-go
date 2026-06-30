@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Changed
+- V2 API support is now determined by the configured `Environment` (`saas`) rather than
+  a Conjur Cloud hostname match, so Edge deployments running under arbitrary hostnames can
+  use V2 endpoints. A base URL ending in `/api` is now auto-detected as `saas`. (CNJR-14071)
+
 ## [0.15.1] - 2026-07-01
 
 ### Added

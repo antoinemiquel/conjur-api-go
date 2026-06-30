@@ -85,7 +85,7 @@ const AuthenticatorsMinVersion = "1.23.0"
 //
 // The authenticated user must have create privileges on the conjur/authn-<type> policy.
 func (c *ClientV2) CreateAuthenticator(authenticator *AuthenticatorBase) (*AuthenticatorResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
 		return nil, fmt.Errorf("authenticators API is not supported in Conjur versions older than %s", AuthenticatorsMinVersion)
 	}
 
@@ -107,7 +107,7 @@ func (c *ClientV2) CreateAuthenticator(authenticator *AuthenticatorBase) (*Authe
 //
 // The authenticated user must have read privileges on the authenticator.
 func (c *ClientV2) GetAuthenticator(authenticatorType string, authenticatorName string) (*AuthenticatorResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
 		return nil, fmt.Errorf("authenticators API is not supported in Conjur versions older than %s", AuthenticatorsMinVersion)
 	}
 
@@ -130,7 +130,7 @@ func (c *ClientV2) GetAuthenticator(authenticatorType string, authenticatorName 
 //
 // The authenticated user must have update privileges on the authenticator.
 func (c *ClientV2) UpdateAuthenticator(authenticatorType string, authenticatorName string, enabled bool) (*AuthenticatorResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
 		return nil, fmt.Errorf("authenticators API is not supported in Conjur versions older than %s", AuthenticatorsMinVersion)
 	}
 
@@ -152,7 +152,7 @@ func (c *ClientV2) UpdateAuthenticator(authenticatorType string, authenticatorNa
 //
 // The authenticated user must have update privileges on the authenticator.
 func (c *ClientV2) DeleteAuthenticator(authenticatorType string, authenticatorName string) error {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
 		return fmt.Errorf("authenticators API is not supported in Conjur versions older than %s", AuthenticatorsMinVersion)
 	}
 
@@ -178,7 +178,7 @@ func (c *ClientV2) DeleteAuthenticator(authenticatorType string, authenticatorNa
 //
 // The authenticated user must have read privileges on the authenticators.
 func (c *ClientV2) ListAuthenticators() (*AuthenticatorListResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(AuthenticatorsMinVersion) != nil {
 		return nil, fmt.Errorf("authenticators API is not supported in Conjur versions older than %s", AuthenticatorsMinVersion)
 	}
 

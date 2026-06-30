@@ -18,7 +18,7 @@ type GroupMember struct {
 func (c *ClientV2) AddGroupMember(groupID string, member GroupMember) (*GroupMember, error) {
 	memberResp := GroupMember{}
 
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(MinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return nil, fmt.Errorf(NotSupportedInOldVersions, "Group Membership API", MinVersion)
 	}
 
@@ -36,7 +36,7 @@ func (c *ClientV2) AddGroupMember(groupID string, member GroupMember) (*GroupMem
 }
 
 func (c *ClientV2) RemoveGroupMember(groupID string, member GroupMember) ([]byte, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) && c.VerifyMinServerVersion(MinVersion) != nil {
+	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return nil, fmt.Errorf(NotSupportedInOldVersions, "Group Membership API", MinVersion)
 	}
 
@@ -117,7 +117,7 @@ func (member GroupMember) Validate() error {
 
 func (c *ClientV2) addGroupMembershipURL(groupID string) string {
 	account := c.config.Account
-	if isConjurCloudURL(c.config.ApplianceURL) {
+	if c.config.IsSaaS() {
 		account = ""
 	}
 	return makeRouterURL(c.config.ApplianceURL, "groups", account, groupID, "members").String()
@@ -125,7 +125,7 @@ func (c *ClientV2) addGroupMembershipURL(groupID string) string {
 
 func (c *ClientV2) removeGroupMembershipURL(groupID string, member GroupMember) string {
 	account := c.config.Account
-	if isConjurCloudURL(c.config.ApplianceURL) {
+	if c.config.IsSaaS() {
 		account = ""
 	}
 	return makeRouterURL(c.config.ApplianceURL, "groups", account, groupID, "members", member.Kind, member.ID).String()

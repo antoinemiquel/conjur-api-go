@@ -2,7 +2,6 @@ package conjurapi
 
 import (
 	"net/http"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -113,7 +112,7 @@ func TestClientV2_CreateStaticSecret(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			member, err := conjur.CreateStaticSecret(tc.secret)
-			if isConjurCloudURL(os.Getenv("CONJUR_APPLIANCE_URL")) {
+			if conjur.config.IsSaaS() {
 
 				if tc.expectError != "" {
 					assert.Error(t, err)
@@ -159,7 +158,7 @@ func TestClientV2_GetStaticSecretDetails(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			member, err := conjur.GetStaticSecretDetails(tc.path)
 
-			if isConjurCloudURL(os.Getenv("CONJUR_APPLIANCE_URL")) {
+			if conjur.config.IsSaaS() {
 
 				if tc.expectError != "" {
 					assert.Error(t, err)
@@ -202,7 +201,7 @@ func TestClientV2_GetStaticSecretPermissions(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			member, err := conjur.GetStaticSecretPermissions(tc.path)
-			if isConjurCloudURL(os.Getenv("CONJUR_APPLIANCE_URL")) {
+			if conjur.config.IsSaaS() {
 				if tc.expectError != "" {
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), tc.expectError)
