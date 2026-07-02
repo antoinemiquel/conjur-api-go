@@ -121,6 +121,20 @@ func NewClientFromAWSCredentials(config Config, telemetry ...Telemetry) (*Client
 	return client, err
 }
 
+// NewClientFromAWSCredentialsWith creates a Conjur client using authn-iam.
+// When creds is non-nil its values are used as explicit AWS credentials on every
+// authentication attempt; otherwise the ambient AWS SDK credential chain is used.
+func NewClientFromAWSCredentialsWith(config Config, creds *authn.IAMCredentials, telemetry ...Telemetry) (*Client, error) {
+	authenticator := &authn.IAMAuthenticator{}
+	client, err := newClientWithAuthenticator(config, authenticator, telemetry...)
+	if err == nil {
+		authenticator.Authenticate = func() ([]byte, error) {
+			return client.IAMAuthenticateWithCredentials(creds)
+		}
+	}
+	return client, err
+}
+
 func NewClientFromGCPCredentials(config Config, identityUrl string, telemetry ...Telemetry) (*Client, error) {
 	if identityUrl == "" {
 		identityUrl = authn.GcpIdentityURL
