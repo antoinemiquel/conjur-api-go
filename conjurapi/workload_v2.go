@@ -114,13 +114,13 @@ func (c *ClientV2) DeleteWorkloadRequest(workloadID string) (*http.Request, erro
 		return nil, fmt.Errorf("Must specify a Workload ID")
 	}
 
-	fullURL := makeRouterURL(c.config.ApplianceURL, "hosts", url.QueryEscape(workloadID)).String()
+	fullURL := makeRouterURL(c.config.ApplianceURL, "workloads", url.QueryEscape(workloadID)).String()
 	req, err := http.NewRequest(http.MethodDelete, fullURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Add(v2APIOutgoingHeaderID, v2APIHeader)
+	req.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
 	return req, nil
 }
 
