@@ -387,6 +387,26 @@ func TestDeleteWorkloadRequest_MissingIDError(t *testing.T) {
 	}
 }
 
+func TestDeleteWorkloadRequest_EndpointAndHeader(t *testing.T) {
+	c := newTestClient("http://conjur.test")
+
+	req, err := c.V2().DeleteWorkloadRequest("data/apps/my-workload")
+	if err != nil {
+		t.Errorf("Error Test failed %s", err)
+	}
+	if req.Method != http.MethodDelete {
+		t.Errorf("Expected DELETE, got %s", req.Method)
+	}
+	// Workloads created via POST /workloads are deleted via DELETE /workloads/<id>,
+	// not /hosts/<id>. The ID must be URL-escaped so branch separators are preserved.
+	if req.URL.Path != "/workloads/data/apps/my-workload" {
+		t.Errorf("Unexpected path: %s, want /workloads/data/apps/my-workload", req.URL.Path)
+	}
+	if got := req.Header.Get("Accept"); got != "application/x.secretsmgr.v2beta+json" {
+		t.Errorf("Unexpected Accept header: %s, want application/x.secretsmgr.v2beta+json", got)
+	}
+}
+
 func TestDeleteWorkloadRequest_Unauthorized401(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.Header.Get("Authorization"), "token") {
