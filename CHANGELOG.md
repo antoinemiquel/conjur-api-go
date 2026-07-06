@@ -6,7 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## [0.15.1] - 2026-07-01
+## [0.15.1] - 2026-07-07
+
+### Changed
+- V2 API support is now determined by the configured `Environment` (`saas`) rather than
+  a Conjur Cloud hostname match, so Edge deployments running under arbitrary hostnames can
+  use V2 endpoints when the environment probe or `CONJUR_ENVIRONMENT=saas` identifies
+  them as SaaS. (CNJR-14071)
 
 ### Added
 - Add support for `authn-ldap` groups and users mappings management (create, show, list, delete). CNJR-14197

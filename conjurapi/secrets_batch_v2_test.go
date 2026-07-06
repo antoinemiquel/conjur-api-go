@@ -29,7 +29,7 @@ func TestClientV2_BatchRetrieveSecrets(t *testing.T) {
 	_, err = utils.Setup(batchSecretsTestPolicy)
 	require.NoError(t, err)
 	conjur := utils.Client().V2()
-	if !isConjurCloudURL(conjur.config.ApplianceURL) {
+	if !conjur.config.IsSaaS() {
 		t.Skip("Skipping V2 Batch Retrieve Secrets test for on-prem")
 	}
 
@@ -192,6 +192,99 @@ func TestClientV2_BatchRetrieveSecretsRequest(t *testing.T) {
 			err = json.Unmarshal(body, &batchReq)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedCount, len(batchReq.IDs))
+		})
+	}
+}
+
+func TestClientV2_BatchRetrieveSecrets_EnvironmentGuard(t *testing.T) {
+	// The V2 batch guard must key off the configured Environment, not the
+	// hostname, so Edge (arbitrary hostnames behind '/api') is supported.
+	tests := []struct {
+		name          string
+		environment   EnvironmentType
+		appliance     string
+		expectBlocked bool
+	}{
+		{
+			name:          "Self-hosted is blocked",
+			environment:   EnvironmentSH,
+			appliance:     "https://conjur.example.com",
+			expectBlocked: true,
+		},
+		{
+			name:          "OSS is blocked",
+			environment:   EnvironmentOSS,
+			appliance:     "https://conjur.example.com",
+			expectBlocked: true,
+		},
+		{
+			name:          "SaaS on arbitrary Edge hostname is allowed past the guard",
+			environment:   EnvironmentSaaS,
+			appliance:     "https://edge.customer.example.com/api",
+			expectBlocked: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &ClientV2{Client: &Client{config: Config{
+				Environment:  tt.environment,
+				ApplianceURL: tt.appliance,
+				Account:      "myacct",
+			}}}
+
+			_, err := c.BatchRetrieveSecrets([]string{"data/test/secret1"})
+			require.Error(t, err)
+			if tt.expectBlocked {
+				assert.Contains(t, err.Error(), fmt.Sprintf(NotSupportedInConjurEnterprise, "V2 Batch Retrieve Secrets API"))
+			} else {
+				// Past the guard, the call fails for an unrelated reason (no live
+				// server/token), but must not be blocked as unsupported.
+				assert.NotContains(t, err.Error(), fmt.Sprintf(NotSupportedInConjurEnterprise, "V2 Batch Retrieve Secrets API"))
+			}
+		})
+	}
+}
+
+func TestClientV2_batchSecretsURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		environment EnvironmentType
+		appliance   string
+		account     string
+		expected    string
+	}{
+		{
+			name:        "SaaS omits the account",
+			environment: EnvironmentSaaS,
+			appliance:   "https://tenant.secretsmgr.cyberark.cloud",
+			account:     "conjur",
+			expected:    "https://tenant.secretsmgr.cyberark.cloud/api/secrets/values",
+		},
+		{
+			name:        "Edge (saas via /api) omits the account",
+			environment: EnvironmentSaaS,
+			appliance:   "https://edge.customer.example.com/api",
+			account:     "myacct",
+			expected:    "https://edge.customer.example.com/api/secrets/values",
+		},
+		{
+			name:        "Self-hosted keeps the account",
+			environment: EnvironmentSH,
+			appliance:   "https://conjur.example.com",
+			account:     "myacct",
+			expected:    "https://conjur.example.com/secrets/myacct/values",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &ClientV2{Client: &Client{config: Config{
+				Environment:  tt.environment,
+				ApplianceURL: tt.appliance,
+				Account:      tt.account,
+			}}}
+			assert.Equal(t, tt.expected, c.batchSecretsURL())
 		})
 	}
 }

@@ -69,7 +69,7 @@ func (c *ClientV2) CreateStaticSecretRequest(secret StaticSecret) (*http.Request
 }
 
 func (c *ClientV2) CreateStaticSecret(secret StaticSecret) (*StaticSecretResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) {
+	if !c.config.IsSaaS() {
 		return nil, fmt.Errorf("StaticSecret API %s", NotSupportedInConjurEnterprise)
 	}
 
@@ -121,7 +121,7 @@ func (c *ClientV2) GetStaticSecretDetailsRequest(identifier string) (*http.Reque
 }
 
 func (c *ClientV2) GetStaticSecretDetails(identifier string) (*StaticSecretResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) {
+	if !c.config.IsSaaS() {
 		return nil, fmt.Errorf("StaticSecret API %s", NotSupportedInConjurEnterprise)
 	}
 
@@ -173,7 +173,7 @@ func (c *ClientV2) GetStaticSecretPermissionsRequest(identifier string) (*http.R
 }
 
 func (c *ClientV2) GetStaticSecretPermissions(identifier string) (*PermissionResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) {
+	if !c.config.IsSaaS() {
 		return nil, fmt.Errorf("StaticSecret API %s", NotSupportedInConjurEnterprise)
 	}
 

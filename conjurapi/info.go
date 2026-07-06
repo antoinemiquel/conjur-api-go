@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -31,6 +32,95 @@ type EnterpriseInfoService struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
 	Arch        string `json:"arch"`
+}
+
+// HasSelfHostedSurface reports whether the appliance exposes the classic Conjur
+// self-hosted surface: the enterprise '/info' endpoint and/or the OSS root
+// version endpoint. Edge and SaaS deployments do not expose these endpoints.
+func (c *Client) HasSelfHostedSurface() bool {
+	hasSurface, _ := c.classifySelfHostedSurface()
+	return hasSurface
+}
+
+// classifySelfHostedSurface probes '/info' and the root endpoint to detect a
+// classic self-hosted appliance. confident is false when the appliance could not
+// be reached (for example, due to network or timeout errors).
+func (c *Client) classifySelfHostedSurface() (hasSurface bool, confident bool) {
+	if isConjurCloudURL(c.config.ApplianceURL) {
+		return false, true
+	}
+
+	infoReachable, infoSuccess := c.probeEnterpriseInfoEndpoint()
+	if infoSuccess {
+		return true, true
+	}
+
+	rootReachable, rootSuccess := c.probeRootVersionEndpoint()
+	if rootSuccess {
+		return true, true
+	}
+
+	return false, infoReachable || rootReachable
+}
+
+func (c *Client) probeEnterpriseInfoEndpoint() (reachable bool, success bool) {
+	req, err := c.ServerInfoRequest()
+	if err != nil {
+		return false, false
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false, false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
+		return true, false
+	}
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return true, false
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return true, false
+	}
+
+	infoResponse := EnterpriseInfoResponse{}
+	if err := json.Unmarshal(body, &infoResponse); err != nil {
+		return true, false
+	}
+
+	return true, true
+}
+
+func (c *Client) probeRootVersionEndpoint() (reachable bool, success bool) {
+	req, err := c.RootRequest()
+	if err != nil {
+		return false, false
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false, false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		return true, false
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return true, false
+	}
+
+	if _, err := parseVersionFromRoot(resp, body); err != nil {
+		return true, false
+	}
+
+	return true, true
 }
 
 // ServerVersion retrieves the Conjur server version, either from the '/info' endpoint in Secrets Manager Self-Hosted,
@@ -70,6 +160,7 @@ func (c *Client) EnterpriseServerInfo() (*EnterpriseInfoResponse, error) {
 	resp, err := c.httpClient.Do(req)
 	// Handle 404 or 401 response, which indicates that the '/info' endpoint is not available (eg. in Conjur OSS)
 	if resp != nil && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized) {
+		resp.Body.Close()
 		return nil, fmt.Errorf("404 Not Found: Are you using Idira Secrets Manager, Self-Hosted")
 	}
 

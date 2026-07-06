@@ -2,11 +2,20 @@ package conjurapi
 
 import (
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/cyberark/conjur-api-go/conjurapi/logging"
 )
+
+const environmentProbeTimeout = 5 * time.Second
+
+type environmentProbeResult struct {
+	environment EnvironmentType
+	persistable bool
+}
 
 // EnvironmentType represents the type of Secrets Manager environment.
 type EnvironmentType string
@@ -66,15 +75,91 @@ func environmentIsSupported(environment string) bool {
 	return slices.Contains(SupportedEnvironments, strings.ToLower(environment))
 }
 
-func defaultEnvironment(url string, showLog bool) EnvironmentType {
+func defaultEnvironment(config Config, showLog bool) EnvironmentType {
+	env, _ := resolveDefaultEnvironment(config, showLog)
+	return env
+}
+
+func resolveDefaultEnvironment(config Config, showLog bool) (EnvironmentType, bool) {
+	url := config.ApplianceURL
 	if isConjurCloudURL(url) {
 		if showLog {
 			logging.ApiLog.Info("Detected Idira Secrets Manager, SaaS URL, setting 'Environment' to 'saas'")
 		}
-		return EnvironmentSaaS
+		return EnvironmentSaaS, true
+	}
+	if hasAPIBasePath(url) {
+		result := probeEnvironmentFromAppliance(config, showLog)
+		if showLog {
+			logging.ApiLog.Infof(
+				"Probed appliance with '/api' base path, setting 'Environment' to '%s'",
+				result.environment,
+			)
+		}
+		return result.environment, result.persistable
 	}
 	if showLog {
 		logging.ApiLog.Info("'Environment' not specified, setting to 'self-hosted'")
 	}
-	return EnvironmentSH
+	return EnvironmentSH, true
+}
+
+func probeEnvironmentFromAppliance(config Config, showLog bool) environmentProbeResult {
+	if showLog {
+		logging.ApiLog.Info(
+			"Ambiguous '/api' base path; probing appliance '/info' and root endpoints to detect environment. " +
+				"Set CONJUR_ENVIRONMENT to skip this probe.",
+		)
+	}
+
+	result := environmentProbeResult{
+		environment: EnvironmentSaaS,
+		persistable: false,
+	}
+
+	httpClient, err := createProbeHttpClient(config)
+	if err != nil {
+		logging.ApiLog.Warningf(
+			"Could not create HTTP client for environment probe: %s; defaulting 'Environment' to 'saas' without persisting",
+			err,
+		)
+		return result
+	}
+
+	client := &Client{config: config, httpClient: httpClient}
+	hasSurface, confident := client.classifySelfHostedSurface()
+	if !confident {
+		logging.ApiLog.Warning(
+			"Environment probe could not reach the appliance; defaulting 'Environment' to 'saas' without persisting",
+		)
+		return result
+	}
+
+	if hasSurface {
+		return environmentProbeResult{
+			environment: EnvironmentSH,
+			persistable: true,
+		}
+	}
+
+	return environmentProbeResult{
+		environment: EnvironmentSaaS,
+		persistable: true,
+	}
+}
+
+func createProbeHttpClient(config Config) (*http.Client, error) {
+	httpClient, err := createHttpClient(config)
+	if err != nil {
+		return nil, err
+	}
+	httpClient.Timeout = environmentProbeTimeout
+	return httpClient, nil
+}
+
+// hasAPIBasePath reports whether the base URL's path ends with '/api'. Both Edge
+// deployments and on-prem nginx mounts can use this suffix, so it is only an
+// ambiguity signal and not sufficient on its own to classify the environment.
+func hasAPIBasePath(baseURL string) bool {
+	return strings.HasSuffix(strings.TrimSuffix(baseURL, "/"), "/api")
 }

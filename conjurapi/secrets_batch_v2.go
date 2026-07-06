@@ -27,7 +27,7 @@ type BatchSecretResponse struct {
 const minVersion = "1.24.0"
 
 func (c *ClientV2) BatchRetrieveSecrets(identifiers []string) (*BatchSecretResponse, error) {
-	if !isConjurCloudURL(c.config.ApplianceURL) {
+	if !c.config.IsSaaS() {
 		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "V2 Batch Retrieve Secrets API")
 	}
 
@@ -101,7 +101,7 @@ func ValidateSecretIdentifiers(identifiers []string) ([]string, error) {
 
 func (c *ClientV2) batchSecretsURL() string {
 	account := c.config.Account
-	if isConjurCloudURL(c.config.ApplianceURL) {
+	if c.config.IsSaaS() {
 		account = ""
 	}
 	return makeRouterURL(c.config.ApplianceURL, "secrets", account, "values").String()

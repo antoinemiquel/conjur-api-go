@@ -133,7 +133,7 @@ func TestClient_CreateIssuerV2Issue(t *testing.T) {
 				tc.issue.Subject.CommonName = tc.subjectCommonName
 			}
 			locIssue, err := conjur.V2().CertificateIssue(createdIssuer.ID, tc.issue)
-			if isConjurCloudURL(os.Getenv("CONJUR_APPLIANCE_URL")) {
+			if conjur.config.IsSaaS() {
 
 				if tc.expectError != "" {
 					assert.Error(t, err)
@@ -215,7 +215,7 @@ func TestClient_CreateIssuerV2Sign(t *testing.T) {
 			assert.NotEmpty(t, createdIssuer.ModifiedAt)
 
 			locIssue, err := conjur.V2().CertificateSign(createdIssuer.ID, tc.sign)
-			if isConjurCloudURL(os.Getenv("CONJUR_APPLIANCE_URL")) {
+			if conjur.config.IsSaaS() {
 
 				if tc.expectError != "" {
 					assert.Error(t, err)

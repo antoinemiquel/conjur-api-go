@@ -1,9 +1,11 @@
 package conjurapi
 
 import (
+	"net/http"
 	"os"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -115,6 +117,44 @@ func TestEnterpriseServerInfo(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "404")
 		assert.Nil(t, info)
+	})
+}
+
+func TestHasSelfHostedSurface(t *testing.T) {
+	t.Run("Enterprise mock responds on /info", func(t *testing.T) {
+		mockServer, mockClient, _ := createMockConjurClient(t)
+		defer mockServer.Close()
+		assert.True(t, mockClient.HasSelfHostedSurface())
+	})
+
+	t.Run("Missing /info and root endpoints", func(t *testing.T) {
+		originalMockEnterpriseInfo := mockEnterpriseInfo
+		originalMockRootResponse := mockRootResponse
+		mockEnterpriseInfo = ""
+		mockRootResponse = ""
+		t.Cleanup(func() {
+			mockEnterpriseInfo = originalMockEnterpriseInfo
+			mockRootResponse = originalMockRootResponse
+		})
+
+		mockServer, mockClient, _ := createMockConjurClient(t)
+		defer mockServer.Close()
+		assert.False(t, mockClient.HasSelfHostedSurface())
+	})
+
+	t.Run("Not supported on Secrets Manager SaaS URL", func(t *testing.T) {
+		client := &Client{config: Config{ApplianceURL: "https://tenant.secretsmgr.cyberark.cloud"}}
+		assert.False(t, client.HasSelfHostedSurface())
+	})
+
+	t.Run("classifySelfHostedSurface reports inconclusive when unreachable", func(t *testing.T) {
+		client := &Client{
+			config:     Config{ApplianceURL: "http://127.0.0.1:1/api"},
+			httpClient: &http.Client{Timeout: time.Second},
+		}
+		hasSurface, confident := client.classifySelfHostedSurface()
+		assert.False(t, hasSurface)
+		assert.False(t, confident)
 	})
 }
 
