@@ -485,8 +485,9 @@ func (c *Config) applyDefaults(persist bool) {
 		}
 	}
 	if len(c.Environment) == 0 {
-		c.Environment = defaultEnvironment(c.ApplianceURL, persist)
-		if persist {
+		env, persistEnv := resolveDefaultEnvironment(*c, persist)
+		c.Environment = env
+		if persist && persistEnv {
 			c.AddToConjurRc("environment", string(c.Environment))
 		}
 	}
