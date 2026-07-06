@@ -12,8 +12,153 @@ import (
 const TestAccessKeyID = "AKIAIOSFODNN7EXAMPLE"
 const TestSecretAccessKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 
+const (
+	issuerAWSAccessKeyVariable       = "aws-access-key-id"
+	issuerAWSSecretKeyVariable       = "aws-secret-access-key"
+	issuerAWSAccessKeyAltVariable    = "aws-access-key-id-2"
+	issuerAWSSecretKeyAltVariable    = "aws-secret-access-key-2"
+	issuerAWSAccessKeyRefPath        = "data/test/aws-access-key-id"
+	issuerAWSSecretKeyRefPath        = "data/test/aws-secret-access-key"
+	issuerAWSAccessKeyAltRefPath     = "data/test/aws-access-key-id-2"
+	issuerAWSSecretKeyAltRefPath     = "data/test/aws-secret-access-key-2"
+	issuerAWSInvalidAccessKeyRefPath = "data/test/aws-invalid-access-key-id"
+	issuerAWSInvalidSecretKeyRefPath = "data/test/aws-invalid-secret-access-key"
+)
+
+const issuerAWSCredentialPolicy = `
+- !variable aws-access-key-id
+- !variable aws-secret-access-key
+`
+
+const issuerAWSCredentialAltPolicy = `
+- !variable aws-access-key-id-2
+- !variable aws-secret-access-key-2
+`
+
+const issuerAWSInvalidCredentialPolicy = `
+- !variable aws-invalid-access-key-id
+- !variable aws-invalid-secret-access-key
+`
+
+func issuerAWSData() map[string]interface{} {
+	return map[string]interface{}{
+		"access_key_id_secret_ref": map[string]interface{}{
+			"id": issuerAWSAccessKeyRefPath,
+		},
+		"secret_access_key_secret_ref": map[string]interface{}{
+			"id": issuerAWSSecretKeyRefPath,
+		},
+	}
+}
+
+func issuerAWSUpdateData() map[string]interface{} {
+	return map[string]interface{}{
+		"access_key_id_secret_ref": map[string]interface{}{
+			"id": issuerAWSAccessKeyAltRefPath,
+		},
+		"secret_access_key_secret_ref": map[string]interface{}{
+			"id": issuerAWSSecretKeyAltRefPath,
+		},
+	}
+}
+
+func issuerAWSInvalidData() map[string]interface{} {
+	return map[string]interface{}{
+		"access_key_id_secret_ref": map[string]interface{}{
+			"id": issuerAWSInvalidAccessKeyRefPath,
+		},
+		"secret_access_key_secret_ref": map[string]interface{}{
+			"id": issuerAWSInvalidSecretKeyRefPath,
+		},
+	}
+}
+
+func newTestAWSIssuer(id string, maxTTL int) Issuer {
+	return Issuer{
+		ID:     id,
+		Type:   "aws",
+		MaxTTL: maxTTL,
+		Data:   issuerAWSData(),
+	}
+}
+
+func setupIssuerAWSCredentials(t *testing.T, utils TestUtils, conjur *Client) {
+	t.Helper()
+
+	_, err := conjur.LoadPolicy(
+		PolicyModePost,
+		utils.PolicyBranch(),
+		strings.NewReader(issuerAWSCredentialPolicy),
+	)
+	assert.NoError(t, err)
+	assert.NoError(t, conjur.AddSecret(utils.IDWithPath(issuerAWSAccessKeyVariable), TestAccessKeyID))
+	assert.NoError(t, conjur.AddSecret(utils.IDWithPath(issuerAWSSecretKeyVariable), TestSecretAccessKey))
+}
+
+func setupIssuerAWSAltCredentials(t *testing.T, utils TestUtils, conjur *Client) {
+	t.Helper()
+
+	_, err := conjur.LoadPolicy(
+		PolicyModePost,
+		utils.PolicyBranch(),
+		strings.NewReader(issuerAWSCredentialAltPolicy),
+	)
+	assert.NoError(t, err)
+	assert.NoError(t, conjur.AddSecret(utils.IDWithPath(issuerAWSAccessKeyAltVariable), "AKIAIOSFODNN7EXAMPLE2"))
+	assert.NoError(t, conjur.AddSecret(utils.IDWithPath(issuerAWSSecretKeyAltVariable), "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY2"))
+}
+
+func setupIssuerAWSInvalidCredentials(t *testing.T, utils TestUtils, conjur *Client) {
+	t.Helper()
+
+	_, err := conjur.LoadPolicy(
+		PolicyModePost,
+		utils.PolicyBranch(),
+		strings.NewReader(issuerAWSInvalidCredentialPolicy),
+	)
+	assert.NoError(t, err)
+	assert.NoError(t, conjur.AddSecret(utils.IDWithPath("aws-invalid-access-key-id"), "invalid"))
+	assert.NoError(t, conjur.AddSecret(utils.IDWithPath("aws-invalid-secret-access-key"), "invalid"))
+}
+
+func prepareIssuerIntegrationTest(t *testing.T, utils TestUtils, conjur *Client) {
+	t.Helper()
+	setupIssuerAWSCredentials(t, utils, conjur)
+	setupIssuerAWSAltCredentials(t, utils, conjur)
+	setupIssuerAWSInvalidCredentials(t, utils, conjur)
+}
+
+func assertIssuerAWSCredentialsMasked(t *testing.T, issuer Issuer) {
+	t.Helper()
+
+	accessRef, hasAccessRef := issuer.Data["access_key_id_secret_ref"].(map[string]interface{})
+	secretRef, hasSecretRef := issuer.Data["secret_access_key_secret_ref"].(map[string]interface{})
+	assert.True(t, hasAccessRef)
+	assert.True(t, hasSecretRef)
+	assert.Equal(t, issuerAWSAccessKeyRefPath, accessRef["id"])
+	assert.Equal(t, issuerAWSSecretKeyRefPath, secretRef["id"])
+	if secretKey, ok := issuer.Data["secret_access_key"].(string); ok {
+		assert.Equal(t, "*****", secretKey)
+	}
+}
+
+func assertIssuerAWSPrimaryCredentials(t *testing.T, issuer Issuer) {
+	t.Helper()
+
+	accessRef, ok := issuer.Data["access_key_id_secret_ref"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, issuerAWSAccessKeyRefPath, accessRef["id"])
+}
+
+func assertIssuerAWSAltCredentials(t *testing.T, issuer Issuer) {
+	t.Helper()
+
+	accessRef, ok := issuer.Data["access_key_id_secret_ref"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, issuerAWSAccessKeyAltRefPath, accessRef["id"])
+}
+
 func TestClient_CreateIssuer(t *testing.T) {
-	SkipIfCloud(t, "dynamic secrets issuer tests until issuer API schema aligns with self-hosted (Refs: CNJR-14234)")
 	config := &Config{}
 	config.mergeEnv()
 
@@ -24,6 +169,7 @@ func TestClient_CreateIssuer(t *testing.T) {
 	assert.NoError(t, err)
 
 	conjur := utils.Client()
+	prepareIssuerIntegrationTest(t, utils, conjur)
 
 	testCases := []struct {
 		name         string
@@ -39,10 +185,6 @@ func TestClient_CreateIssuer(t *testing.T) {
 			id:         "test-issuer",
 			issuerType: "aws",
 			maxTTL:     900,
-			data: map[string]interface{}{
-				"access_key_id":     TestAccessKeyID,
-				"secret_access_key": TestSecretAccessKey,
-			},
 			assertError: func(t *testing.T, err error) {
 				assert.NoError(t, err)
 			},
@@ -50,9 +192,7 @@ func TestClient_CreateIssuer(t *testing.T) {
 				assert.Equal(t, "test-issuer", issuer.ID)
 				assert.Equal(t, "aws", issuer.Type)
 				assert.Equal(t, 900, issuer.MaxTTL)
-				assert.Equal(t, TestAccessKeyID, issuer.Data["access_key_id"])
-				// Expect masked response for the access key
-				assert.Equal(t, "*****", issuer.Data["secret_access_key"])
+				assertIssuerAWSCredentialsMasked(t, issuer)
 				assert.NotEmpty(t, issuer.CreatedAt)
 				assert.NotEmpty(t, issuer.ModifiedAt)
 			},
@@ -62,16 +202,13 @@ func TestClient_CreateIssuer(t *testing.T) {
 			id:         "test-issuer",
 			issuerType: "aws",
 			maxTTL:     900,
-			data: map[string]interface{}{
-				"access_key_id":     "invalid",
-				"secret_access_key": "invalid",
-			},
+			data:       issuerAWSInvalidData(),
 			assertError: func(t *testing.T, err error) {
 				assert.Error(t, err)
 				assert.Regexp(
 					t,
 					// Secrets Manager SaaS returns "Entity", Enterprise returns "Content"
-					"422 Unprocessable (Content|Entity). invalid '(access_key_id|secret_access_key)' parameter format",
+					"422 Unprocessable (Content|Entity)",
 					err.Error(),
 				)
 			},
@@ -82,11 +219,16 @@ func TestClient_CreateIssuer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			data := tc.data
+			if data == nil {
+				data = issuerAWSData()
+			}
+
 			issuer := Issuer{
 				ID:     tc.id,
 				Type:   tc.issuerType,
 				MaxTTL: tc.maxTTL,
-				Data:   tc.data,
+				Data:   data,
 			}
 
 			createdIssuer, err := conjur.CreateIssuer(issuer)
@@ -106,8 +248,6 @@ func TestClient_CreateIssuer(t *testing.T) {
 }
 
 func TestClient_DeleteIssuer(t *testing.T) {
-	SkipIfCloud(t, "dynamic secrets issuer tests until issuer API schema aligns with self-hosted (Refs: CNJR-14234)")
-
 	config := &Config{}
 	config.mergeEnv()
 
@@ -118,6 +258,7 @@ func TestClient_DeleteIssuer(t *testing.T) {
 	assert.NoError(t, err)
 
 	conjur := utils.Client()
+	prepareIssuerIntegrationTest(t, utils, conjur)
 
 	testCases := []struct {
 		name        string
@@ -131,17 +272,7 @@ func TestClient_DeleteIssuer(t *testing.T) {
 			id:          "test-issuer",
 			keepSecrets: false,
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "test-issuer",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("test-issuer", 900))
 				assert.NoError(t, err)
 
 				secretPolicy := `
@@ -174,17 +305,7 @@ func TestClient_DeleteIssuer(t *testing.T) {
 			id:          "test-issuer",
 			keepSecrets: true,
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "test-issuer",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("test-issuer", 900))
 				assert.NoError(t, err)
 
 				secretPolicy := `
@@ -240,8 +361,6 @@ func TestClient_DeleteIssuer(t *testing.T) {
 }
 
 func TestClient_Issuer(t *testing.T) {
-	SkipIfCloud(t, "dynamic secrets issuer tests until issuer API schema aligns with self-hosted (Refs: CNJR-14234)")
-
 	config := &Config{}
 	config.mergeEnv()
 
@@ -252,6 +371,7 @@ func TestClient_Issuer(t *testing.T) {
 	assert.NoError(t, err)
 
 	conjur := utils.Client()
+	prepareIssuerIntegrationTest(t, utils, conjur)
 
 	testCases := []struct {
 		name         string
@@ -265,17 +385,7 @@ func TestClient_Issuer(t *testing.T) {
 			name: "Get an Issuer",
 			id:   "test-issuer-2",
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "test-issuer-2",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("test-issuer-2", 900))
 				assert.NoError(t, err)
 			},
 			assertError: func(t *testing.T, err error) {
@@ -285,9 +395,7 @@ func TestClient_Issuer(t *testing.T) {
 				assert.Equal(t, "test-issuer-2", issuer.ID)
 				assert.Equal(t, "aws", issuer.Type)
 				assert.Equal(t, 900, issuer.MaxTTL)
-				assert.Equal(t, TestAccessKeyID, issuer.Data["access_key_id"])
-				// Expect masked response for the access key
-				assert.Equal(t, "*****", issuer.Data["secret_access_key"])
+				assertIssuerAWSCredentialsMasked(t, issuer)
 				assert.NotEmpty(t, issuer.CreatedAt)
 				assert.NotEmpty(t, issuer.ModifiedAt)
 			},
@@ -332,8 +440,6 @@ func TestClient_Issuer(t *testing.T) {
 }
 
 func TestClient_Issuers(t *testing.T) {
-	SkipIfCloud(t, "dynamic secrets issuer tests until issuer API schema aligns with self-hosted (Refs: CNJR-14234)")
-
 	config := &Config{}
 	config.mergeEnv()
 
@@ -344,6 +450,7 @@ func TestClient_Issuers(t *testing.T) {
 	assert.NoError(t, err)
 
 	conjur := utils.Client()
+	prepareIssuerIntegrationTest(t, utils, conjur)
 
 	testCases := []struct {
 		name          string
@@ -381,15 +488,7 @@ func TestClient_Issuers(t *testing.T) {
 				// Create and delete an issuer to ensure that the
 				// issuer policy exists, but there are no current issuers
 				// in the system.
-				issuer := Issuer{
-					ID:     "no-current-issuer",
-					Type:   "aws",
-					MaxTTL: 900,
-					Data: map[string]interface{}{
-						"access_key_id":     TestAccessKeyID,
-						"secret_access_key": TestSecretAccessKey,
-					},
-				}
+				issuer := newTestAWSIssuer("no-current-issuer", 900)
 
 				issuer, err := conjur.CreateIssuer(issuer)
 				assert.NoError(t, err)
@@ -412,17 +511,7 @@ func TestClient_Issuers(t *testing.T) {
 				// Create and delete an issuer to ensure that the
 				// issuer policy exists, but there are no current issuers
 				// in the system.
-				issuer := Issuer{
-					ID:     "single-issuer",
-					Type:   "aws",
-					MaxTTL: 900,
-					Data: map[string]interface{}{
-						"access_key_id":     TestAccessKeyID,
-						"secret_access_key": TestSecretAccessKey,
-					},
-				}
-
-				_, err := conjur.CreateIssuer(issuer)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("single-issuer", 900))
 				assert.NoError(t, err)
 			},
 			assertError: func(t *testing.T, err error) {
@@ -440,17 +529,7 @@ func TestClient_Issuers(t *testing.T) {
 			name: "100 issuers",
 			setup: func(t *testing.T) {
 				for i := 0; i < 100; i++ {
-					issuer := Issuer{
-						ID:     fmt.Sprintf("issuer-%d", i),
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					}
-
-					_, err := conjur.CreateIssuer(issuer)
+					_, err := conjur.CreateIssuer(newTestAWSIssuer(fmt.Sprintf("issuer-%d", i), 900))
 					assert.NoError(t, err)
 				}
 			},
@@ -488,8 +567,6 @@ func TestClient_Issuers(t *testing.T) {
 }
 
 func TestClient_UpdateIssuer(t *testing.T) {
-	SkipIfCloud(t, "dynamic secrets issuer tests until issuer API schema aligns with self-hosted (Refs: CNJR-14234)")
-
 	config := &Config{}
 	config.mergeEnv()
 
@@ -500,6 +577,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 	assert.NoError(t, err)
 
 	conjur := utils.Client()
+	prepareIssuerIntegrationTest(t, utils, conjur)
 
 	testCases := []struct {
 		name         string
@@ -514,27 +592,14 @@ func TestClient_UpdateIssuer(t *testing.T) {
 			name: "Update issuer",
 			id:   "update-issuer",
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "update-issuer",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("update-issuer", 900))
 				assert.NoError(t, err)
 			},
 			update: func() IssuerUpdate {
 				ttl := 1000
 				return IssuerUpdate{
 					MaxTTL: &ttl,
-					Data: map[string]interface{}{
-						"access_key_id":     "AKIAIOSFODNN7EXAMPLE2",
-						"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY2",
-					},
+					Data:   issuerAWSUpdateData(),
 				}
 			},
 			assertError: func(t *testing.T, err error) {
@@ -542,7 +607,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 			},
 			assertIssuer: func(t *testing.T, issuer Issuer) {
 				assert.Equal(t, issuer.MaxTTL, 1000)
-				assert.Equal(t, issuer.Data["access_key_id"], "AKIAIOSFODNN7EXAMPLE2")
+				assertIssuerAWSAltCredentials(t, issuer)
 			},
 			cleanup: func(t *testing.T) {
 				err := conjur.DeleteIssuer("update-issuer", false)
@@ -557,10 +622,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 				ttl := 1000
 				return IssuerUpdate{
 					MaxTTL: &ttl,
-					Data: map[string]interface{}{
-						"access_key_id":     "AKIAIOSFODNN7EXAMPLE2",
-						"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY2",
-					},
+					Data:   issuerAWSUpdateData(),
 				}
 			},
 			assertError: func(t *testing.T, err error) {
@@ -573,17 +635,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 			name: "Empty issuer update",
 			id:   "empty-update-issuer",
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "empty-update-issuer",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("empty-update-issuer", 900))
 				assert.NoError(t, err)
 			},
 			update: func() IssuerUpdate {
@@ -594,7 +646,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 			},
 			assertIssuer: func(t *testing.T, issuer Issuer) {
 				assert.Equal(t, issuer.MaxTTL, 900)
-				assert.Equal(t, issuer.Data["access_key_id"], TestAccessKeyID)
+				assertIssuerAWSPrimaryCredentials(t, issuer)
 			},
 			cleanup: func(t *testing.T) {
 				err := conjur.DeleteIssuer("empty-update-issuer", false)
@@ -605,17 +657,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 			name: "Invalid max TTL",
 			id:   "invalid-ttl-update",
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "invalid-ttl-update",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("invalid-ttl-update", 900))
 				assert.NoError(t, err)
 			},
 			update: func() IssuerUpdate {
@@ -642,17 +684,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 			name: "Empty data",
 			id:   "empty-data-update",
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "empty-data-update",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("empty-data-update", 900))
 				assert.NoError(t, err)
 			},
 			update: func() IssuerUpdate {
@@ -664,7 +696,7 @@ func TestClient_UpdateIssuer(t *testing.T) {
 				assert.NoError(t, err)
 			},
 			assertIssuer: func(t *testing.T, issuer Issuer) {
-				assert.Equal(t, issuer.Data["access_key_id"], TestAccessKeyID)
+				assertIssuerAWSPrimaryCredentials(t, issuer)
 			},
 			cleanup: func(t *testing.T) {
 				err := conjur.DeleteIssuer("empty-data-update", false)
@@ -675,32 +707,21 @@ func TestClient_UpdateIssuer(t *testing.T) {
 			name: "Invalid data",
 			id:   "invalid-data-update",
 			setup: func(t *testing.T) {
-				_, err := conjur.CreateIssuer(
-					Issuer{
-						ID:     "invalid-data-update",
-						Type:   "aws",
-						MaxTTL: 900,
-						Data: map[string]interface{}{
-							"access_key_id":     TestAccessKeyID,
-							"secret_access_key": TestSecretAccessKey,
-						},
-					},
-				)
+				_, err := conjur.CreateIssuer(newTestAWSIssuer("invalid-data-update", 900))
 				assert.NoError(t, err)
 			},
 			update: func() IssuerUpdate {
 				return IssuerUpdate{
 					Data: map[string]interface{}{
-						"access_key_id": "invalid",
+						"access_key_id_secret_ref": map[string]interface{}{
+							"id": issuerAWSAccessKeyRefPath,
+						},
 					},
 				}
 			},
 			assertError: func(t *testing.T, err error) {
-				assert.Error(
-					t,
-					err,
-					"422 Unprocessable Content. secret_access_key is a required parameter and must be specified.",
-				)
+				assert.Error(t, err)
+				assert.Regexp(t, "422 Unprocessable (Content|Entity)", err.Error())
 			},
 			assertIssuer: func(t *testing.T, issuer Issuer) {
 			},
@@ -713,7 +734,6 @@ func TestClient_UpdateIssuer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-
 			tc.setup(t)
 			defer tc.cleanup(t)
 
