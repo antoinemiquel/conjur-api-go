@@ -62,6 +62,11 @@ func newLdapMockServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server
 			}
 			return
 		}
+		if r.URL.Path == "/info" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"release":"` + LdapMappingsMinVersion + `","services":{"possum":{"desired":"i","status":"i","err":null,"name":"conjur-possum","version":"` + LdapMappingsMinVersion + `","arch":"amd64"}}}`))
+			return
+		}
 		handler(w, r)
 	}))
 	t.Cleanup(srv.Close)
