@@ -484,7 +484,7 @@ func (c *Config) applyDefaults(persist bool) {
 			c.AddToConjurRc("account", c.Account)
 		}
 	}
-	if len(c.Environment) == 0 {
+	if len(c.Environment) == 0 && c.ApplianceURL != "" {
 		env, persistEnv := resolveDefaultEnvironment(*c, persist)
 		c.Environment = env
 		if persist && persistEnv {
