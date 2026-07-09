@@ -157,6 +157,12 @@ func (c *Config) Validate() error {
 		if c.ClientCertKey == "" && c.ClientCertKeyFile == "" {
 			errors = append(errors, "Must specify a client certificate key (ClientCertKey or ClientCertKeyFile) when using cert authentication")
 		}
+		if c.ClientCert != "" && c.ClientCertFile != "" {
+			errors = append(errors, "Must not specify both ClientCert and ClientCertFile when using cert authentication")
+		}
+		if c.ClientCertKey != "" && c.ClientCertKeyFile != "" {
+			errors = append(errors, "Must not specify both ClientCertKey and ClientCertKeyFile when using cert authentication")
+		}
 		// When inline PEM is provided, parse it now so misconfiguration is caught
 		// at construction time rather than at the first TLS handshake.
 		if c.ClientCert != "" && c.ClientCertKey != "" {
@@ -168,6 +174,18 @@ func (c *Config) Validate() error {
 						logging.ApiLog.Warnf("client certificate expired at %s", parsed.NotAfter)
 					}
 				}
+			}
+		}
+		// Inline PEM takes precedence over file paths in ReadClientCert; validate
+		// each file path when the corresponding inline field is unset.
+		if c.ClientCert == "" && c.ClientCertFile != "" {
+			if err := validateClientCertFilePath("client certificate file", c.ClientCertFile); err != nil {
+				errors = append(errors, err.Error())
+			}
+		}
+		if c.ClientCertKey == "" && c.ClientCertKeyFile != "" {
+			if err := validateClientCertFilePath("client certificate key file", c.ClientCertKeyFile); err != nil {
+				errors = append(errors, err.Error())
 			}
 		}
 	}
@@ -186,6 +204,24 @@ func (c *Config) Validate() error {
 		errors = append(errors, fmt.Sprintf("config: %s", c))
 	}
 	return fmt.Errorf("%s", strings.Join(errors, " -- "))
+}
+
+// statClientCertPath is os.Stat by default; tests replace it to simulate permission
+// errors (CI unit tests run as root, where chmod 000 on a parent dir does not yield EACCES).
+var statClientCertPath = os.Stat
+
+func validateClientCertFilePath(label, path string) error {
+	_, err := statClientCertPath(path)
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) {
+		return fmt.Errorf("%s not found: %s", label, path)
+	}
+	if os.IsPermission(err) {
+		return fmt.Errorf("%s is not readable: %s (permission denied)", label, path)
+	}
+	return fmt.Errorf("failed to access %s: %w", label, err)
 }
 
 func (c *Config) ReadSSLCert() ([]byte, error) {

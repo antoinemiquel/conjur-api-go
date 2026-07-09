@@ -44,7 +44,8 @@ const mockConjurToken = `{"protected":"eyJhbGciOiJjb25qdXIub3JnL3Nsb3NpbG8vdjIiL
 // Returns the server and a fully-authenticated Client pointing at it.
 func newLdapMockServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Client) {
 	t.Helper()
-	const apiKey = "test-api-key"
+	login := testCredential("TEST_LOGIN_LDAP_MOCK")
+	apiKey := testCredential("TEST_API_KEY_LDAP_MOCK")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/authn/conjur/login") {
@@ -52,7 +53,7 @@ func newLdapMockServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server
 			w.Write([]byte(apiKey))
 			return
 		}
-		if strings.HasSuffix(r.URL.Path, "/authn/conjur/testuser/authenticate") {
+		if strings.HasSuffix(r.URL.Path, "/authn/conjur/"+login+"/authenticate") {
 			body, _ := io.ReadAll(r.Body)
 			if string(body) == apiKey {
 				w.WriteHeader(http.StatusOK)
@@ -78,7 +79,7 @@ func newLdapMockServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server
 		NetRCPath:         filepath.Join(tempDir, ".netrc"),
 		CredentialStorage: "file",
 	}
-	client, err := NewClientFromKey(config, authn.LoginPair{Login: "testuser", APIKey: apiKey})
+	client, err := NewClientFromKey(config, authn.LoginPair{Login: login, APIKey: apiKey})
 	require.NoError(t, err)
 
 	return srv, client
