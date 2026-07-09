@@ -183,6 +183,12 @@ func Test_defaultEnvironment(t *testing.T) {
 		}
 	})
 
+	t.Run("applyDefaults does not infer environment without appliance URL", func(t *testing.T) {
+		config := Config{}
+		config.applyDefaults(false)
+		assert.Empty(t, config.Environment)
+	})
+
 	t.Run("applyDefaults does not re-probe when Environment is already set", func(t *testing.T) {
 		requests := 0
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

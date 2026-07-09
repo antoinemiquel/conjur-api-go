@@ -472,6 +472,21 @@ func TestConfig_Validate(t *testing.T) {
 
 			assert.Equal(t, EnvironmentSaaS, config.Environment)
 		})
+		t.Run("LoadConfig without appliance URL then override before NewClient", func(t *testing.T) {
+			e := ClearEnv()
+			defer e.RestoreEnv()
+
+			config, err := LoadConfig()
+			require.NoError(t, err)
+			assert.Empty(t, config.Environment)
+
+			config.ApplianceURL = "https://tenant.secretsmgr.integration-cyberark.cloud/api"
+			config.Account = "conjur"
+
+			err = config.Validate()
+			require.NoError(t, err)
+			assert.Equal(t, EnvironmentSaaS, config.Environment)
+		})
 		t.Run("Return error for invalid configuration with invalid Environment", func(t *testing.T) {
 			config := Config{
 				Account:      "account",

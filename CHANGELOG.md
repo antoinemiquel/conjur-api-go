@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-07-09
+
+### Fixed
+- Defer `Environment` inference until `ApplianceURL` is set, so integrators that call
+  `LoadConfig()`, override config fields, then `NewClient()` get the correct environment.
+
 ## [0.15.1] - 2026-07-07
 
 ### Changed
