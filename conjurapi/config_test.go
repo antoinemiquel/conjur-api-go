@@ -362,6 +362,122 @@ func TestConfig_Validate(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "invalid client certificate or key")
 		})
+
+		t.Run("Returns error when client certificate file is missing", func(t *testing.T) {
+			config := Config{
+				Account:           "account",
+				ApplianceURL:      "https://conjur.example.com",
+				AuthnType:         "cert",
+				ServiceID:         "acme-vm",
+				ClientCertFile:    "/no/such/cert.pem",
+				ClientCertKeyFile: "/no/such/key.pem",
+				Environment:       EnvironmentSH,
+			}
+			err := config.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "client certificate file not found")
+			assert.Contains(t, err.Error(), "/no/such/cert.pem")
+		})
+
+		t.Run("Returns error when client certificate key file is missing", func(t *testing.T) {
+			certFile := writeTempFile(t, certPEM)
+			config := Config{
+				Account:           "account",
+				ApplianceURL:      "https://conjur.example.com",
+				AuthnType:         "cert",
+				ServiceID:         "acme-vm",
+				ClientCertFile:    certFile,
+				ClientCertKeyFile: "/no/such/key.pem",
+				Environment:       EnvironmentSH,
+			}
+			err := config.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "client certificate key file not found")
+			assert.Contains(t, err.Error(), "/no/such/key.pem")
+		})
+
+		t.Run("Returns error when client certificate file is not readable", func(t *testing.T) {
+			orig := statClientCertPath
+			statClientCertPath = func(string) (os.FileInfo, error) {
+				return nil, os.ErrPermission
+			}
+			t.Cleanup(func() { statClientCertPath = orig })
+
+			config := Config{
+				Account:           "account",
+				ApplianceURL:      "https://conjur.example.com",
+				AuthnType:         "cert",
+				ServiceID:         "acme-vm",
+				ClientCertFile:    "/etc/ssl/unreadable.pem",
+				ClientCertKeyFile: "/etc/ssl/unreadable-key.pem",
+				Environment:       EnvironmentSH,
+			}
+			err := config.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "client certificate file is not readable")
+			assert.Contains(t, err.Error(), "permission denied")
+		})
+
+		t.Run("Skips file path validation when only inline PEM is set", func(t *testing.T) {
+			config := Config{
+				Account:       "account",
+				ApplianceURL:  "https://conjur.example.com",
+				AuthnType:     "cert",
+				ServiceID:     "acme-vm",
+				ClientCert:    certPEM,
+				ClientCertKey: keyPEM,
+				Environment:   EnvironmentSH,
+			}
+			err := config.Validate()
+			assert.NoError(t, err)
+		})
+
+		t.Run("Returns error when both inline PEM and file path are set for certificate", func(t *testing.T) {
+			config := Config{
+				Account:        "account",
+				ApplianceURL:   "https://conjur.example.com",
+				AuthnType:      "cert",
+				ServiceID:      "acme-vm",
+				ClientCert:     certPEM,
+				ClientCertKey:  keyPEM,
+				ClientCertFile: "/path/to/cert.pem",
+				Environment:    EnvironmentSH,
+			}
+			err := config.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "Must not specify both ClientCert and ClientCertFile")
+		})
+
+		t.Run("Returns error when both inline PEM and file path are set for key", func(t *testing.T) {
+			config := Config{
+				Account:           "account",
+				ApplianceURL:      "https://conjur.example.com",
+				AuthnType:         "cert",
+				ServiceID:         "acme-vm",
+				ClientCert:        certPEM,
+				ClientCertKey:     keyPEM,
+				ClientCertKeyFile: "/path/to/key.pem",
+				Environment:       EnvironmentSH,
+			}
+			err := config.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "Must not specify both ClientCertKey and ClientCertKeyFile")
+		})
+
+		t.Run("Validates key file path when only inline certificate PEM is set", func(t *testing.T) {
+			config := Config{
+				Account:           "account",
+				ApplianceURL:      "https://conjur.example.com",
+				AuthnType:         "cert",
+				ServiceID:         "acme-vm",
+				ClientCert:        certPEM,
+				ClientCertKeyFile: "/no/such/key.pem",
+				Environment:       EnvironmentSH,
+			}
+			err := config.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "client certificate key file not found")
+		})
 	})
 
 	t.Run("Config.String() redacts sensitive credential fields", func(t *testing.T) {

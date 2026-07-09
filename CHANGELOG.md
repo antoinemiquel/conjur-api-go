@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-07-09
+
+### Added
+- Validate authn-cert client certificate and key file paths during `Config.Validate()`
+  so missing or unreadable files fail at client construction with clear errors (CNJR-14097)
+- Reject cert auth configuration that sets both inline PEM and file path for the same
+  credential (ClientCert vs ClientCertFile, ClientCertKey vs ClientCertKeyFile)
+
 ## [0.15.2] - 2026-07-09
 
 ### Fixed
@@ -463,7 +471,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Initial version
 
-[Unreleased]: https://github.com/cyberark/conjur-api-go/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/cyberark/conjur-api-go/compare/v0.15.3...HEAD
+[0.15.3]: https://github.com/cyberark/conjur-api-go/compare/v0.15.2...v0.15.3
+[0.15.2]: https://github.com/cyberark/conjur-api-go/compare/v0.15.1...v0.15.2
+[0.15.1]: https://github.com/cyberark/conjur-api-go/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/cyberark/conjur-api-go/compare/v0.14.1...v0.15.0
 [0.14.0]: https://github.com/cyberark/conjur-api-go/compare/v0.13.19...v0.14.0
 [0.13.19]: https://github.com/cyberark/conjur-api-go/compare/v0.13.18...v0.13.19
