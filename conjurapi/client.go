@@ -52,12 +52,22 @@ type Client struct {
 	v2 *ClientV2
 }
 
+// NewClientFromKey creates a Client authenticated via API key. API-key auth is
+// never valid for OIDC-only cloud users, so a "cloud" AuthnType is normalized
+// to the standard authn endpoint here rather than routing to /authn-oidc/....
 func NewClientFromKey(config Config, loginPair authn.LoginPair, telemetry ...Telemetry) (*Client, error) {
 	authenticator := &authn.APIKeyAuthenticator{
 		LoginPair: loginPair,
 	}
+
+	if config.AuthnType == AuthnTypeCloud {
+		config.AuthnType = AuthnTypeStandard
+	}
+
 	client, err := newClientWithAuthenticator(config, authenticator, telemetry...)
-	authenticator.Authenticate = client.Authenticate
+	if err == nil {
+		authenticator.Authenticate = client.Authenticate
+	}
 	return client, err
 }
 

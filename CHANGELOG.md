@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-07-14
+
+### Fixed
+- `NewClientFromKey` now normalizes the `cloud` `AuthnType` to the standard authn
+  endpoint, since API-key auth is never valid for OIDC-only Conjur Cloud users.
+  (CNJR-14365)
+
 ## [0.15.3] - 2026-07-09
 
 ### Added
