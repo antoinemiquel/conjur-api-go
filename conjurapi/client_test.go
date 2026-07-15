@@ -46,6 +46,18 @@ func TestNewClientFromKey(t *testing.T) {
 		require.NoError(t, err)
 		assert.IsType(t, &authn.APIKeyAuthenticator{}, client.authenticator)
 	})
+
+	t.Run("Normalizes cloud AuthnType to standard authn for API key auth", func(t *testing.T) {
+		client, err := NewClientFromKey(
+			Config{Account: "account", ApplianceURL: "appliance-url", AuthnType: AuthnTypeCloud},
+			authn.LoginPair{Login: "host/data/my-host", APIKey: "api-key"},
+		)
+
+		require.NoError(t, err)
+		req, err := client.AuthenticateRequest(authn.LoginPair{Login: "host/data/my-host", APIKey: "api-key"})
+		require.NoError(t, err)
+		assert.Equal(t, "appliance-url/authn/account/host%2Fdata%2Fmy-host/authenticate", req.URL.String())
+	})
 }
 
 func TestClient_GetConfig(t *testing.T) {
@@ -820,7 +832,9 @@ func TestNewClientFromCloudHost(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, client)
-		assert.Equal(t, "cloud", client.config.AuthnType)
+		// AuthnType is normalized to standard authn so later RefreshToken/Authenticate
+		// calls route to /authn/... instead of /authn-oidc/... (see NewClientFromKey).
+		assert.Equal(t, AuthnTypeStandard, client.config.AuthnType)
 		assert.NotNil(t, client.authenticator)
 	})
 
