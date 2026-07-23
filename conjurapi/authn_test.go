@@ -50,7 +50,7 @@ func TestClient_RotateAPIKey(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			utils, err := NewTestUtils(&Config{})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			_, err = utils.Setup(utils.DefaultTestPolicy())
 			assert.NoError(t, err)
@@ -88,7 +88,7 @@ func TestClient_RotateCurrentUserAPIKey(t *testing.T) {
 	if isConjurCloudURL(os.Getenv("CONJUR_APPLIANCE_URL")) {
 		t.Run("Rotate the API key of the current user not supported in Secrets Manager SaaS", func(t *testing.T) {
 			utils, err := NewTestUtils(&Config{})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			conjur := utils.Client()
 			conjur.storage = &mockStorageProvider{}
@@ -104,7 +104,7 @@ func TestClient_RotateCurrentUserAPIKey(t *testing.T) {
 	t.Run("Rotate the API key of the current user", func(t *testing.T) {
 		// SETUP
 		utils, err := NewTestUtils(&Config{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		keys, err := utils.Setup(userPolicy)
 		assert.NoError(t, err)
@@ -136,7 +136,7 @@ func TestClient_RotateCurrentRoleAPIKey(t *testing.T) {
 	t.Run("Rotate the API key of the current host", func(t *testing.T) {
 		// SETUP
 		utils, err := NewTestUtils(&Config{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		hostPolicy := `
 - !host
@@ -222,7 +222,7 @@ func TestClient_RotateHostAPIKey(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// SETUP
 			utils, err := NewTestUtils(&Config{})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			_, err = utils.Setup(utils.DefaultTestPolicy())
 			assert.NoError(t, err)
@@ -261,7 +261,7 @@ func TestClient_RotateUserAPIKey(t *testing.T) {
 	if isConjurCloudURL(os.Getenv("CONJUR_APPLIANCE_URL")) {
 		t.Run("Rotate the API key of a user not supported in Secrets Manager SaaS", func(t *testing.T) {
 			utils, err := NewTestUtils(&Config{})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			conjur := utils.Client()
 			conjur.storage = &mockStorageProvider{}
@@ -317,7 +317,7 @@ func TestClient_RotateUserAPIKey(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// SETUP
 			utils, err := NewTestUtils(&Config{})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			_, err = utils.Setup(userPolicy)
 			assert.NoError(t, err)
@@ -344,7 +344,7 @@ func runRotateUserAPIKeyAssertions(t *testing.T, tc rotateUserAPIKeyTestCase, co
 func TestClient_Whoami(t *testing.T) {
 	t.Run("Whoami", func(t *testing.T) {
 		utils, err := NewTestUtils(&Config{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		conjur := utils.Client()
 
@@ -450,7 +450,7 @@ func TestClient_AuthenticateReader(t *testing.T) {
 func testLoginConjurCloud(t *testing.T) {
 	t.Run("Login not supported in Secrets Manager SaaS", func(t *testing.T) {
 		utils, err := NewTestUtils(&Config{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		_, err = utils.Setup(utils.DefaultTestPolicy())
 		assert.NoError(t, err)
@@ -824,7 +824,7 @@ func TestClient_ChangeUserPassword(t *testing.T) {
 				CredentialStorage: "none",
 			}
 			utils, err := NewTestUtils(config)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			_, err = utils.Setup(userPolicy)
 			assert.NoError(t, err)
@@ -890,7 +890,7 @@ func TestClient_ChangeCurrentUserPassword(t *testing.T) {
 				CredentialStorage: "file",
 			}
 			utils, err := NewTestUtils(config)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			_, err = utils.Setup(userPolicy)
 			assert.NoError(t, err)

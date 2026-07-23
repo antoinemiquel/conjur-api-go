@@ -32,15 +32,20 @@ func hasField(fields map[string]string, name string) (hasField bool) {
 func NewToken(data []byte) (token *AuthnToken, err error) {
 	fields := make(map[string]string)
 	if err = json.Unmarshal(data, &fields); err != nil {
-		// Check if the caller accidentally passed a base64-encoded token
-		// rather than the raw JSON string.
-		if _, b64err := base64.StdEncoding.DecodeString(string(data)); b64err == nil {
-			err = fmt.Errorf("CONJUR_AUTHN_TOKEN appears to be base64-encoded; " +
-				"it should be the raw JSON access token string, not a base64-encoded one")
-		} else {
-			err = fmt.Errorf("CONJUR_AUTHN_TOKEN is not valid JSON — " +
-				"expected a Conjur access token with 'protected', 'payload', and 'signature' fields: %s", err)
+		// Only hint "base64-encoded" when the decoded bytes actually look like a Conjur token
+		// (i.e. they parse as JSON with the three required token fields). Short alphanumeric
+		// strings often decode successfully from base64 but are unrelated to tokens.
+		if decoded, b64err := base64.StdEncoding.DecodeString(string(data)); b64err == nil {
+			decodedFields := make(map[string]string)
+			if json.Unmarshal(decoded, &decodedFields) == nil &&
+				hasField(decodedFields, "protected") && hasField(decodedFields, "payload") && hasField(decodedFields, "signature") {
+				err = fmt.Errorf("CONJUR_AUTHN_TOKEN appears to be base64-encoded; " +
+					"it should be the raw JSON access token string, not a base64-encoded one")
+				return
+			}
 		}
+		err = fmt.Errorf("CONJUR_AUTHN_TOKEN is not valid JSON — " +
+			"expected a Conjur access token with 'protected', 'payload', and 'signature' fields: %s", err)
 		return
 	}
 

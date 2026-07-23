@@ -481,16 +481,17 @@ func (c *Config) mergeEnv() {
 		env.ServiceID = mergeValue(env.ServiceID, os.Getenv("CONJUR_AUTHN_CERT_SERVICE_ID"))
 	}
 
-	if env.SSLCert != "" && env.SSLCertPath != "" {
-		logging.ApiLog.Warnf(
-			"Both CONJUR_SSL_CERTIFICATE and CONJUR_CERT_FILE are set; "+
-				"CONJUR_SSL_CERTIFICATE (inline PEM) takes precedence. "+
-				"Unset CONJUR_CERT_FILE to suppress this warning.",
-		)
-	}
-
 	logging.ApiLog.Debugf("Config from environment: %s\n", env)
 	c.merge(&env)
+
+	if c.SSLCert != "" && c.SSLCertPath != "" {
+		logging.ApiLog.Warnf(
+			"Both CONJUR_SSL_CERTIFICATE (inline PEM) and a cert file path " +
+				"(CONJUR_CERT_FILE / cert_file) are set; " +
+				"the inline certificate takes precedence. " +
+				"Remove the unused cert path to suppress this warning.",
+		)
+	}
 }
 
 func httpTimoutFromEnv() int {

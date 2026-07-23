@@ -1189,6 +1189,22 @@ func TestConfig_SSLCertEnvConflict(t *testing.T) {
 		assert.Contains(t, hook.messages[0], "CONJUR_CERT_FILE")
 	})
 
+	t.Run("Warns when cert_file from conjurrc conflicts with CONJUR_SSL_CERTIFICATE", func(t *testing.T) {
+		hook := &sslWarnHook{}
+		origHooks := logging.ApiLog.Hooks[logrus.WarnLevel]
+		logging.ApiLog.AddHook(hook)
+		defer func() { logging.ApiLog.Hooks[logrus.WarnLevel] = origHooks }()
+
+		t.Setenv("CONJUR_SSL_CERTIFICATE", "inline-pem-content")
+
+		// Simulate cert_file already merged from .conjurrc before mergeEnv runs.
+		config := Config{SSLCertPath: "/from/conjurrc/cert.pem"}
+		config.mergeEnv()
+
+		require.Len(t, hook.messages, 1)
+		assert.Contains(t, hook.messages[0], "CONJUR_SSL_CERTIFICATE")
+	})
+
 	t.Run("Does not warn when only CONJUR_SSL_CERTIFICATE is set", func(t *testing.T) {
 		hook := &sslWarnHook{}
 		origHooks := logging.ApiLog.Hooks[logrus.WarnLevel]

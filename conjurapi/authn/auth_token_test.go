@@ -64,10 +64,23 @@ func TestToken_Parse(t *testing.T) {
 	})
 
 	t.Run("Base64-encoded token is identified", func(t *testing.T) {
-		// Simulate a caller who accidentally base64-encoded the JSON token
-		b64Token := base64.StdEncoding.EncodeToString([]byte(`{"foo":"bar"}`))
+		// Simulate a caller who accidentally base64-encoded the JSON token.
+		// The decoded payload must resemble a real token (with the 3 required fields)
+		// for the hint to fire.
+		tokenJSON := `{"protected":"xxx","payload":"yyy","signature":"zzz"}`
+		b64Token := base64.StdEncoding.EncodeToString([]byte(tokenJSON))
 		token, err := NewToken([]byte(b64Token))
 		assert.ErrorContains(t, err, "CONJUR_AUTHN_TOKEN appears to be base64-encoded")
+		assert.Nil(t, token)
+	})
+
+	t.Run("Non-token base64 string returns generic JSON error", func(t *testing.T) {
+		// A string that happens to be valid base64 but whose decoded content is not
+		// a Conjur token should get the generic "not valid JSON" error, not the
+		// misleading "appears to be base64-encoded" hint.
+		b64Token := base64.StdEncoding.EncodeToString([]byte(`{"foo":"bar"}`))
+		token, err := NewToken([]byte(b64Token))
+		assert.ErrorContains(t, err, "CONJUR_AUTHN_TOKEN is not valid JSON")
 		assert.Nil(t, token)
 	})
 
