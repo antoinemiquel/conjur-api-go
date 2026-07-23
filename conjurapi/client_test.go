@@ -88,7 +88,8 @@ func TestNewClientFromTokenFile(t *testing.T) {
 	t.Run("Returns error when using nonexistent SSLCertPath", func(t *testing.T) {
 		client, err := NewClientFromTokenFile(Config{Account: "account", ApplianceURL: "https://appliance-url", SSLCertPath: "fake-path"}, "token-file")
 
-		assert.EqualError(t, err, "open fake-path: no such file or directory")
+		assert.ErrorContains(t, err, "SSL certificate (CONJUR_CERT_FILE=fake-path)")
+		assert.ErrorContains(t, err, "no such file or directory")
 		assert.Nil(t, client)
 	})
 }
@@ -164,7 +165,8 @@ func TestNewClientFromEnvironment(t *testing.T) {
 		os.Setenv("HOME", t.TempDir())
 		client, err := NewClientFromEnvironment(Config{Account: "account", ApplianceURL: "https://appliance-url", SSLCertPath: "fake-path"})
 
-		assert.EqualError(t, err, "open fake-path: no such file or directory")
+		assert.ErrorContains(t, err, "SSL certificate (CONJUR_CERT_FILE=fake-path)")
+		assert.ErrorContains(t, err, "no such file or directory")
 		assert.Nil(t, client)
 	})
 }
@@ -305,7 +307,8 @@ func TestNewClientFromJwt(t *testing.T) {
 
 		client, err := NewClientFromJwt(config)
 
-		assert.EqualError(t, err, "open fake-path: no such file or directory")
+		assert.ErrorContains(t, err, "SSL certificate (CONJUR_CERT_FILE=fake-path)")
+		assert.ErrorContains(t, err, "no such file or directory")
 		assert.Nil(t, client)
 	})
 }
@@ -386,7 +389,8 @@ func Test_newClientFromStoredCredentials(t *testing.T) {
 			storageProvider.StoreCredentials("user", "password")
 		}
 		client, err := newClientFromStoredCredentials(badCertConfig)
-		assert.EqualError(t, err, "open fake-path: no such file or directory")
+		assert.ErrorContains(t, err, "SSL certificate (CONJUR_CERT_FILE=fake-path)")
+		assert.ErrorContains(t, err, "no such file or directory")
 		assert.Nil(t, client)
 	})
 
@@ -566,7 +570,8 @@ func Test_newClientFromStoredOidcCredentials(t *testing.T) {
 		}
 		client, err := newClientFromStoredCredentials(badCertConfig)
 
-		assert.EqualError(t, err, "open fake-path: no such file or directory")
+		assert.ErrorContains(t, err, "SSL certificate (CONJUR_CERT_FILE=fake-path)")
+		assert.ErrorContains(t, err, "no such file or directory")
 		assert.Nil(t, client)
 	})
 }

@@ -226,9 +226,16 @@ func validateClientCertFilePath(label, path string) error {
 
 func (c *Config) ReadSSLCert() ([]byte, error) {
 	if c.SSLCert != "" {
+		if c.SSLCertPath != "" {
+			logging.ApiLog.Debugf("SSL certificate sourced from CONJUR_SSL_CERTIFICATE (inline PEM); CONJUR_CERT_FILE is ignored.")
+		}
 		return []byte(c.SSLCert), nil
 	}
-	return os.ReadFile(c.SSLCertPath)
+	cert, err := os.ReadFile(c.SSLCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("SSL certificate (CONJUR_CERT_FILE=%s): %w", c.SSLCertPath, err)
+	}
+	return cert, nil
 }
 
 // ReadClientCert loads the mTLS client certificate and key for authn-cert.
@@ -472,6 +479,14 @@ func (c *Config) mergeEnv() {
 		env.AuthnType = "cert"
 		// CONJUR_AUTHN_CERT_SERVICE_ID overrides CONJUR_SERVICE_ID
 		env.ServiceID = mergeValue(env.ServiceID, os.Getenv("CONJUR_AUTHN_CERT_SERVICE_ID"))
+	}
+
+	if env.SSLCert != "" && env.SSLCertPath != "" {
+		logging.ApiLog.Warnf(
+			"Both CONJUR_SSL_CERTIFICATE and CONJUR_CERT_FILE are set; "+
+				"CONJUR_SSL_CERTIFICATE (inline PEM) takes precedence. "+
+				"Unset CONJUR_CERT_FILE to suppress this warning.",
+		)
 	}
 
 	logging.ApiLog.Debugf("Config from environment: %s\n", env)

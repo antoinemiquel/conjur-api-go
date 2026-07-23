@@ -174,8 +174,12 @@ All authentication methods require the following common configuration. Use `conj
 |---|---|---|---|
 | `Account` | `CONJUR_ACCOUNT` | Yes | Conjur account name |
 | `ApplianceURL` | `CONJUR_APPLIANCE_URL` | Yes | Conjur server URL |
-| `SSLCertPath` | `CONJUR_CERT_FILE` | No | Path to Conjur SSL certificate |
-| `SSLCert` | `CONJUR_SSL_CERTIFICATE` | No | Conjur SSL certificate content |
+| `SSLCertPath` | `CONJUR_CERT_FILE` | No | Path to Conjur SSL certificate file |
+| `SSLCert` | `CONJUR_SSL_CERTIFICATE` | No | Inline PEM content of the Conjur SSL certificate |
+
+> **Note:** If both `CONJUR_SSL_CERTIFICATE` and `CONJUR_CERT_FILE` are set,
+> the inline PEM (`CONJUR_SSL_CERTIFICATE`) takes precedence and the file path
+> is ignored. A warning is logged to help surface this misconfiguration.
 
 #### API Key
 

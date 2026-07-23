@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.15.5] - 2026-07-23
+
+### Fixed
+- Log a warning when both `CONJUR_SSL_CERTIFICATE` and `CONJUR_CERT_FILE` are
+  set; `ReadSSLCert` now annotates file-read errors with the `CONJUR_CERT_FILE`
+  path so the cert source is clear in error output (CNJR-14594)
+
 ## [0.15.4] - 2026-07-14
 
 ### Fixed
