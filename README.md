@@ -287,6 +287,22 @@ by a trusted CA (e.g., enterprise PKI, SPIFFE/SPIRE).
 | `CONJUR_AUTHN_CERT_KEY_FILE` | Path to the PEM-encoded private key file |
 | `CONJUR_AUTHN_CERT_HOST_ID` | Conjur host ID (omit for SPIFFE mode) |
 
+##### `.conjurrc` Configuration
+
+Only file-path fields are readable from `.conjurrc`. Inline PEM strings
+(`ClientCert` / `ClientCertKey`) cannot be set via `.conjurrc` and must be
+supplied through the `Config` struct directly.
+
+| `.conjurrc` key | Corresponding `Config` field | Description |
+|---|---|---|
+| `client_cert_file` | `ClientCertFile` | Path to the PEM-encoded client certificate |
+| `client_cert_key_file` | `ClientCertKeyFile` | Path to the PEM-encoded private key |
+| `cert_host_id` | `CertHostID` | Conjur host ID (request mode); omit for SPIFFE mode |
+
+> **Note:** Inline PEM support for `.conjurrc` (`client_cert` / `client_cert_key`) is not
+> currently implemented. Use `CONJUR_AUTHN_CERT_FILE` / `CONJUR_AUTHN_CERT_KEY_FILE`
+> environment variables or set `ClientCert` / `ClientCertKey` on the `Config` struct.
+
 ##### Two operating modes
 
 | Mode | `CertHostID` | How the host is identified |
