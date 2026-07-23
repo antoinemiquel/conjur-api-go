@@ -32,7 +32,15 @@ func hasField(fields map[string]string, name string) (hasField bool) {
 func NewToken(data []byte) (token *AuthnToken, err error) {
 	fields := make(map[string]string)
 	if err = json.Unmarshal(data, &fields); err != nil {
-		err = fmt.Errorf("Unable to unmarshal token: %s", err)
+		// Check if the caller accidentally passed a base64-encoded token
+		// rather than the raw JSON string.
+		if _, b64err := base64.StdEncoding.DecodeString(string(data)); b64err == nil {
+			err = fmt.Errorf("CONJUR_AUTHN_TOKEN appears to be base64-encoded; " +
+				"it should be the raw JSON access token string, not a base64-encoded one")
+		} else {
+			err = fmt.Errorf("CONJUR_AUTHN_TOKEN is not valid JSON — " +
+				"expected a Conjur access token with 'protected', 'payload', and 'signature' fields: %s", err)
+		}
 		return
 	}
 
@@ -40,7 +48,8 @@ func NewToken(data []byte) (token *AuthnToken, err error) {
 		t := &AuthnToken{}
 		token = t
 	} else {
-		err = fmt.Errorf("Unrecognized token format")
+		err = fmt.Errorf("CONJUR_AUTHN_TOKEN is missing required fields — " +
+			"expected 'protected', 'payload', and 'signature'")
 		return
 	}
 
