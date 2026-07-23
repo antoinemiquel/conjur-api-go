@@ -10,6 +10,9 @@ import (
 type JWTAuthenticator struct {
 	JWT          string
 	JWTFilePath  string
+	// K8sTokenPath overrides the default Kubernetes service-account token path.
+	// When empty, the well-known path is used. Intended for testing.
+	K8sTokenPath string
 	HostID       string
 	Authenticate func(jwt, hostId string) ([]byte, error)
 }
@@ -42,8 +45,12 @@ func (a *JWTAuthenticator) RefreshJWT() error {
 		logging.ApiLog.Debugf("Reading JWT from %s", a.JWTFilePath)
 		jwtFilePath = a.JWTFilePath
 	} else {
-		jwtFilePath = k8sJWTPath
-		logging.ApiLog.Debugf("No JWT file path set. Attempting to ready JWT from %s", jwtFilePath)
+		if a.K8sTokenPath != "" {
+			jwtFilePath = a.K8sTokenPath
+		} else {
+			jwtFilePath = k8sJWTPath
+		}
+		logging.ApiLog.Debugf("No JWT file path set. Attempting to read JWT from %s", jwtFilePath)
 	}
 
 	token, err := readJWTFromFile(jwtFilePath)

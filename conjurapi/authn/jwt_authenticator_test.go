@@ -46,8 +46,16 @@ func TestJWTAuthenticator_RefreshToken(t *testing.T) {
 		assert.Equal(t, []byte("token"), token)
 	})
 
-	t.Run("Defaults to Kubernetes service account path", func(t *testing.T) {
+	t.Run("Uses K8sTokenPath override when set", func(t *testing.T) {
+		// Verifies the K8sTokenPath field takes precedence over the const default.
+		// The const default (k8sJWTPath → /var/run/secrets/…) is not covered here
+		// because creating that path requires root outside a Kubernetes pod.
+		tmpToken := filepath.Join(t.TempDir(), "token")
+		err := os.WriteFile(tmpToken, []byte("k8s-jwt-content"), 0600)
+		assert.NoError(t, err)
+
 		authenticator := JWTAuthenticator{
+			K8sTokenPath: tmpToken,
 			Authenticate: func(jwt, hostid string) ([]byte, error) {
 				assert.Equal(t, "k8s-jwt-content", jwt)
 				assert.Equal(t, "", hostid)
@@ -55,19 +63,9 @@ func TestJWTAuthenticator_RefreshToken(t *testing.T) {
 			},
 		}
 
-		// Note: this may fail when not running in a container
-		err := os.MkdirAll(filepath.Dir(k8sJWTPath), 0755)
-		assert.NoError(t, err)
-		err = os.WriteFile(k8sJWTPath, []byte("k8s-jwt-content"), 0600)
-		assert.NoError(t, err)
-
 		token, err := authenticator.RefreshToken()
 		assert.NoError(t, err)
 		assert.Equal(t, []byte("token"), token)
-
-		t.Cleanup(func() {
-			os.Remove(k8sJWTPath)
-		})
 	})
 
 	t.Run("Returns error when Authenticate fails", func(t *testing.T) {

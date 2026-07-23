@@ -14,9 +14,12 @@ import (
 )
 
 func TestIsKeyringAvailable(t *testing.T) {
-	// Keyring shouldn't be avaialble by default in the container running the tests
-	// until we enable the mock keyring
+	// Simulate an unavailable keyring (e.g. no D-Bus session in a container)
+	// by injecting a mock that returns an error on every operation.
+	keyring.MockInitWithError(errors.New("keyring unavailable"))
 	assert.False(t, IsKeyringAvailable())
+
+	// Switch to a healthy mock — the keyring should now report as available.
 	keyring.MockInit()
 	assert.True(t, IsKeyringAvailable())
 }
