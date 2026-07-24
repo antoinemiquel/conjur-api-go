@@ -9,6 +9,19 @@ import (
 	"github.com/cyberark/conjur-api-go/conjurapi/logging"
 )
 
+// ConjurError is the error type returned when the Conjur server responds with a
+// non-2xx status. It preserves the HTTP status code so callers can distinguish
+// error conditions without relying on error-message text:
+//
+//	var conjurErr *ConjurError
+//	if errors.As(err, &conjurErr) {
+//	    switch conjurErr.Code {
+//	    case 404:
+//	        // Resource or authenticator webservice not found
+//	    case 403:
+//	        // Access denied
+//	    }
+//	}
 type ConjurError struct {
 	Code    int
 	Message string

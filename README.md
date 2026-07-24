@@ -174,8 +174,12 @@ All authentication methods require the following common configuration. Use `conj
 |---|---|---|---|
 | `Account` | `CONJUR_ACCOUNT` | Yes | Conjur account name |
 | `ApplianceURL` | `CONJUR_APPLIANCE_URL` | Yes | Conjur server URL |
-| `SSLCertPath` | `CONJUR_CERT_FILE` | No | Path to Conjur SSL certificate |
-| `SSLCert` | `CONJUR_SSL_CERTIFICATE` | No | Conjur SSL certificate content |
+| `SSLCertPath` | `CONJUR_CERT_FILE` | No | Path to Conjur SSL certificate file |
+| `SSLCert` | `CONJUR_SSL_CERTIFICATE` | No | Inline PEM content of the Conjur SSL certificate |
+
+> **Note:** If both `CONJUR_SSL_CERTIFICATE` and `CONJUR_CERT_FILE` are set,
+> the inline PEM (`CONJUR_SSL_CERTIFICATE`) takes precedence and the file path
+> is ignored. A warning is logged to help surface this misconfiguration.
 
 #### API Key
 
@@ -282,6 +286,22 @@ by a trusted CA (e.g., enterprise PKI, SPIFFE/SPIRE).
 | `CONJUR_AUTHN_CERT_FILE` | Path to the PEM-encoded client certificate file |
 | `CONJUR_AUTHN_CERT_KEY_FILE` | Path to the PEM-encoded private key file |
 | `CONJUR_AUTHN_CERT_HOST_ID` | Conjur host ID (omit for SPIFFE mode) |
+
+##### `.conjurrc` Configuration
+
+Only file-path fields are readable from `.conjurrc`. Inline PEM strings
+(`ClientCert` / `ClientCertKey`) cannot be set via `.conjurrc` and must be
+supplied through the `Config` struct directly.
+
+| `.conjurrc` key | Corresponding `Config` field | Description |
+|---|---|---|
+| `client_cert_file` | `ClientCertFile` | Path to the PEM-encoded client certificate |
+| `client_cert_key_file` | `ClientCertKeyFile` | Path to the PEM-encoded private key |
+| `cert_host_id` | `CertHostID` | Conjur host ID (request mode); omit for SPIFFE mode |
+
+> **Note:** Inline PEM support for `.conjurrc` (`client_cert` / `client_cert_key`) is not
+> currently implemented. Use `CONJUR_AUTHN_CERT_FILE` / `CONJUR_AUTHN_CERT_KEY_FILE`
+> environment variables or set `ClientCert` / `ClientCertKey` on the `Config` struct.
 
 ##### Two operating modes
 

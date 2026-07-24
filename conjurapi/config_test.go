@@ -1145,7 +1145,8 @@ func TestConfig_ReadSSLCert(t *testing.T) {
 		config := Config{}
 
 		cert, err := config.ReadSSLCert()
-		assert.EqualError(t, err, "open : no such file or directory")
+		assert.ErrorContains(t, err, "SSL certificate (CONJUR_CERT_FILE=)")
+		assert.ErrorContains(t, err, "no such file or directory")
 		assert.Nil(t, cert)
 	})
 
@@ -1157,6 +1158,79 @@ func TestConfig_ReadSSLCert(t *testing.T) {
 		cert, err := config.ReadSSLCert()
 		assert.NoError(t, err)
 		assert.Equal(t, "test-cert", string(cert))
+	})
+}
+
+type sslWarnHook struct {
+	messages []string
+}
+
+func (h *sslWarnHook) Levels() []logrus.Level { return []logrus.Level{logrus.WarnLevel} }
+func (h *sslWarnHook) Fire(e *logrus.Entry) error {
+	h.messages = append(h.messages, e.Message)
+	return nil
+}
+
+func TestConfig_SSLCertEnvConflict(t *testing.T) {
+	t.Run("Warns when both CONJUR_SSL_CERTIFICATE and CONJUR_CERT_FILE are set", func(t *testing.T) {
+		hook := &sslWarnHook{}
+		origHooks := logging.ApiLog.Hooks[logrus.WarnLevel]
+		logging.ApiLog.AddHook(hook)
+		defer func() { logging.ApiLog.Hooks[logrus.WarnLevel] = origHooks }()
+
+		t.Setenv("CONJUR_SSL_CERTIFICATE", "inline-pem-content")
+		t.Setenv("CONJUR_CERT_FILE", "/path/to/cert.pem")
+
+		config := Config{}
+		config.mergeEnv()
+
+		require.Len(t, hook.messages, 1)
+		assert.Contains(t, hook.messages[0], "CONJUR_SSL_CERTIFICATE")
+		assert.Contains(t, hook.messages[0], "CONJUR_CERT_FILE")
+	})
+
+	t.Run("Warns when cert_file from conjurrc conflicts with CONJUR_SSL_CERTIFICATE", func(t *testing.T) {
+		hook := &sslWarnHook{}
+		origHooks := logging.ApiLog.Hooks[logrus.WarnLevel]
+		logging.ApiLog.AddHook(hook)
+		defer func() { logging.ApiLog.Hooks[logrus.WarnLevel] = origHooks }()
+
+		t.Setenv("CONJUR_SSL_CERTIFICATE", "inline-pem-content")
+
+		// Simulate cert_file already merged from .conjurrc before mergeEnv runs.
+		config := Config{SSLCertPath: "/from/conjurrc/cert.pem"}
+		config.mergeEnv()
+
+		require.Len(t, hook.messages, 1)
+		assert.Contains(t, hook.messages[0], "CONJUR_SSL_CERTIFICATE")
+	})
+
+	t.Run("Does not warn when only CONJUR_SSL_CERTIFICATE is set", func(t *testing.T) {
+		hook := &sslWarnHook{}
+		origHooks := logging.ApiLog.Hooks[logrus.WarnLevel]
+		logging.ApiLog.AddHook(hook)
+		defer func() { logging.ApiLog.Hooks[logrus.WarnLevel] = origHooks }()
+
+		t.Setenv("CONJUR_SSL_CERTIFICATE", "inline-pem-content")
+
+		config := Config{}
+		config.mergeEnv()
+
+		assert.Empty(t, hook.messages)
+	})
+
+	t.Run("Does not warn when only CONJUR_CERT_FILE is set", func(t *testing.T) {
+		hook := &sslWarnHook{}
+		origHooks := logging.ApiLog.Hooks[logrus.WarnLevel]
+		logging.ApiLog.AddHook(hook)
+		defer func() { logging.ApiLog.Hooks[logrus.WarnLevel] = origHooks }()
+
+		t.Setenv("CONJUR_CERT_FILE", "/path/to/cert.pem")
+
+		config := Config{}
+		config.mergeEnv()
+
+		assert.Empty(t, hook.messages)
 	})
 }
 

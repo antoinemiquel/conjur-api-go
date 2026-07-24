@@ -14,6 +14,22 @@ type AuthenticatorStatusResponse struct {
 	Error  string `json:"error"`
 }
 
+// AuthenticatorStatus queries the policy-validation status of an authenticator
+// service.
+//
+// On failure the server returns a non-2xx response and this method returns a
+// *[response.ConjurError]. Inspect [response.ConjurError.Code] via [errors.As]
+// to distinguish error conditions:
+//
+//	_, err := client.AuthenticatorStatus("authn-jwt", "my-service")
+//	var conjurErr *response.ConjurError
+//	if errors.As(err, &conjurErr) {
+//	    // Conjur Enterprise: HTTP 404 = authenticator type not supported or
+//	    //   webservice not defined in policy; HTTP 500 = authenticator is
+//	    //   defined but not enabled (AuthenticatorNotWhitelisted).
+//	    // SaaS: both conditions map to HTTP 500.
+//	    fmt.Println("HTTP status:", conjurErr.Code)
+//	}
 func (c *Client) AuthenticatorStatus(authenticatorType string, serviceID string) (*AuthenticatorStatusResponse, error) {
 	req, err := c.AuthenticatorStatusRequest(authenticatorType, serviceID)
 	if err != nil {

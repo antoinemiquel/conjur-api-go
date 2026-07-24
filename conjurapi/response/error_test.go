@@ -1,6 +1,7 @@
 package response
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -84,6 +85,20 @@ func TestNewConjurError(t *testing.T) {
 			assert.EqualValues(t, tc.expected.Code, cerr.Code)
 		})
 	}
+
+	t.Run("errors.As extracts ConjurError.Code", func(t *testing.T) {
+		resp := &http.Response{
+			StatusCode: 404,
+			Status:     "Not Found",
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"not found"}}`)),
+		}
+		err := NewConjurError(resp)
+		require.Error(t, err)
+
+		var conjurErr *ConjurError
+		require.True(t, errors.As(err, &conjurErr), "expected errors.As to find *ConjurError")
+		assert.Equal(t, 404, conjurErr.Code)
+	})
 
 	t.Run("error reading body", func(t *testing.T) {
 		resp := &http.Response{
