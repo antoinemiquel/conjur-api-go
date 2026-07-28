@@ -730,7 +730,7 @@ func TestClient_RefreshToken(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("Retrieves cached token when using OIDC", func(t *testing.T) {
+	t.Run("Retrieves cached token when using OIDC and client prefers cached sessions", func(t *testing.T) {
 		client, err := NewClient(Config{
 			Account:      "conjur",
 			ApplianceURL: "https://conjur",
@@ -739,12 +739,34 @@ func TestClient_RefreshToken(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
+		client.preferCachedToken = true
 		client.storage = mockStorageWithCachedAuthnToken(sample_token, nil)
 		client.authenticator = &authn.OidcAuthenticator{}
 		err = client.RefreshToken()
 
 		assert.NoError(t, err)
 		assert.Equal(t, sample_token, string(client.authToken.Raw()))
+	})
+
+	t.Run("Ignores cached token and uses authenticator when explicit credentials were supplied", func(t *testing.T) {
+		client, err := NewClient(Config{
+			Account:      "conjur",
+			ApplianceURL: "https://conjur",
+			AuthnType:    "iam",
+			ServiceID:    "test-service",
+			JWTHostID:    "test-host",
+		})
+		assert.NoError(t, err)
+
+		// A valid cached token exists in storage, but this client was built with
+		// explicit credentials (preferCachedToken left false), so the cache must
+		// be ignored and the authenticator must always be invoked.
+		client.storage = mockStorageWithCachedAuthnToken(sample_token, nil)
+		client.authenticator = &authn.TokenAuthenticator{Token: expired_token}
+		err = client.RefreshToken()
+
+		assert.NoError(t, err)
+		assert.Equal(t, expired_token, string(client.authToken.Raw()))
 	})
 }
 

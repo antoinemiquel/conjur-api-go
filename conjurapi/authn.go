@@ -24,13 +24,17 @@ type OidcProvider struct {
 }
 
 func (c *Client) RefreshToken() (err error) {
-	// Fetch cached conjur access token if using OIDC, IAM, Azure or Secrets Manager SaaS identity
-	authType := c.GetConfig().AuthnType
-	switch authType {
-	case "oidc", "iam", "azure", "gcp", "cloud":
-		token := c.readCachedAccessToken()
-		if token != nil {
-			c.authToken = token
+	// Reuse a cached conjur access token only when this client was reconstructed
+	// from a prior stored session (see newClientFromStored*), not when it was
+	// built with explicit credentials that must always be verified.
+	if c.preferCachedToken {
+		authType := c.GetConfig().AuthnType
+		switch authType {
+		case "oidc", "iam", "azure", "gcp", "cloud":
+			token := c.readCachedAccessToken()
+			if token != nil {
+				c.authToken = token
+			}
 		}
 	}
 
