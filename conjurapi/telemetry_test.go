@@ -13,7 +13,6 @@ func withMockBuildInfo(t *testing.T, binfo *debug.BuildInfo, ok bool) {
 
 	prevBuildInfo := buildInfo
 	prevBuildInfoOk := buildInfoOk
-	prevBuildInfoOnce := buildInfoOnce
 
 	buildInfo = binfo
 	buildInfoOk = ok
@@ -23,7 +22,8 @@ func withMockBuildInfo(t *testing.T, binfo *debug.BuildInfo, ok bool) {
 	t.Cleanup(func() {
 		buildInfo = prevBuildInfo
 		buildInfoOk = prevBuildInfoOk
-		buildInfoOnce = prevBuildInfoOnce
+		buildInfoOnce = sync.Once{}
+		buildInfoOnce.Do(func() {})
 	})
 }
 
