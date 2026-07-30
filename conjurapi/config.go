@@ -666,13 +666,13 @@ func (c *Config) SetIntegrationVersion(inversion string) {
 	if inversion == DefaultIntegrationVersion {
 		currentDir, err := filepath.Abs(".")
 		if err != nil {
-			fmt.Errorf("Error getting current directory: %v", err)
+			logging.ApiLog.Debugf("Error getting current directory: %v", err)
 		}
 		versionPath := filepath.Join(currentDir, "..", "VERSION")
 
 		latestVersion, err := GetReleaseVersion(versionPath)
 		if err != nil {
-			fmt.Errorf("Error: %v", err)
+			logging.ApiLog.Debugf("Error reading release version: %v", err)
 		}
 		c.IntegrationVersion = latestVersion
 	} else {

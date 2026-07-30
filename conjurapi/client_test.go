@@ -349,6 +349,151 @@ func TestNewClientFromOidcCode(t *testing.T) {
 	})
 }
 
+// TestPreferCachedToken_ExplicitCredentialConstructors verifies the fix for the
+// cached-token-override bug: constructors that receive explicit credentials must
+// never set preferCachedToken, so RefreshToken always exercises the supplied
+// credential instead of silently reusing a cached token for the same storage key.
+func TestPreferCachedToken_ExplicitCredentialConstructors(t *testing.T) {
+	t.Run("NewClientFromKey leaves preferCachedToken false", func(t *testing.T) {
+		client, err := NewClientFromKey(
+			Config{Account: "account", ApplianceURL: "appliance-url"},
+			authn.LoginPair{Login: "login", APIKey: "api-key"},
+		)
+		require.NoError(t, err)
+		assert.False(t, client.preferCachedToken)
+	})
+
+	t.Run("NewClientFromOidcCode leaves preferCachedToken false", func(t *testing.T) {
+		config := Config{ServiceID: "test", AuthnType: "oidc", Account: "account", ApplianceURL: "appliance-url"}
+		client, err := NewClientFromOidcCode(config, "test-code", "test-nonce", "test-code-verifier")
+		require.NoError(t, err)
+		assert.False(t, client.preferCachedToken)
+	})
+
+	t.Run("NewClientFromOidcToken leaves preferCachedToken false", func(t *testing.T) {
+		config := Config{ServiceID: "test", AuthnType: "oidc", Account: "account", ApplianceURL: "appliance-url"}
+		client, err := NewClientFromOidcToken(config, "test-token")
+		require.NoError(t, err)
+		assert.False(t, client.preferCachedToken)
+	})
+
+	t.Run("NewClientFromAWSCredentials leaves preferCachedToken false", func(t *testing.T) {
+		config := Config{ServiceID: "test", AuthnType: "iam", Account: "account", ApplianceURL: "appliance-url", JWTHostID: "test-host"}
+		client, err := NewClientFromAWSCredentials(config)
+		require.NoError(t, err)
+		assert.False(t, client.preferCachedToken)
+	})
+
+	t.Run("NewClientFromAWSCredentialsWith leaves preferCachedToken false", func(t *testing.T) {
+		config := Config{ServiceID: "test", AuthnType: "iam", Account: "account", ApplianceURL: "appliance-url", JWTHostID: "test-host"}
+		client, err := NewClientFromAWSCredentialsWith(config, &authn.IAMCredentials{AccessKeyID: "id", SecretAccessKey: "secret"})
+		require.NoError(t, err)
+		assert.False(t, client.preferCachedToken)
+	})
+
+	t.Run("NewClientFromAzureCredentials leaves preferCachedToken false", func(t *testing.T) {
+		config := Config{ServiceID: "test", AuthnType: "azure", Account: "account", ApplianceURL: "appliance-url", JWTHostID: "test-host", JWTContent: "test-jwt"}
+		client, err := NewClientFromAzureCredentials(config)
+		require.NoError(t, err)
+		assert.False(t, client.preferCachedToken)
+	})
+
+	t.Run("NewClientFromGCPCredentials leaves preferCachedToken false", func(t *testing.T) {
+		config := Config{ServiceID: "test", AuthnType: "gcp", Account: "account", ApplianceURL: "appliance-url", JWTHostID: "test-host", JWTContent: "test-jwt"}
+		client, err := NewClientFromGCPCredentials(config, "")
+		require.NoError(t, err)
+		assert.False(t, client.preferCachedToken)
+	})
+}
+
+// TestPreferCachedToken_StoredSessionHelpers verifies the other half of the fix:
+// the newClientFromStored* helpers, which reconstruct a client from a prior login
+// with no new credentials supplied, must set preferCachedToken so RefreshToken can
+// legitimately resume the cached session.
+func TestPreferCachedToken_StoredSessionHelpers(t *testing.T) {
+	t.Run("newClientFromStoredOidcCredentials sets preferCachedToken", func(t *testing.T) {
+		tempDir := t.TempDir()
+		config := Config{
+			ServiceID:         "test",
+			AuthnType:         "oidc",
+			Account:           "account",
+			ApplianceURL:      "appliance-url",
+			CredentialStorage: "file",
+			NetRCPath:         filepath.Join(tempDir, ".netrc"),
+		}
+		storageProvider, err := createStorageProvider(config)
+		require.NoError(t, err)
+		require.NoError(t, storageProvider.StoreAuthnToken([]byte(sample_token)))
+
+		client, err := newClientFromStoredOidcCredentials(config)
+		require.NoError(t, err)
+		assert.True(t, client.preferCachedToken)
+	})
+
+	t.Run("newClientFromStoredAWSConfig sets preferCachedToken", func(t *testing.T) {
+		tempDir := t.TempDir()
+		config := Config{
+			ServiceID:         "test",
+			AuthnType:         "iam",
+			Account:           "account",
+			ApplianceURL:      "appliance-url",
+			JWTHostID:         "test-host",
+			CredentialStorage: "file",
+			NetRCPath:         filepath.Join(tempDir, ".netrc"),
+		}
+		storageProvider, err := createStorageProvider(config)
+		require.NoError(t, err)
+		require.NoError(t, storageProvider.StoreAuthnToken([]byte(sample_token)))
+
+		// If preferCachedToken weren't set, RefreshToken would skip the cache
+		// and fall through to the IAM authenticator, which has no ambient AWS
+		// credentials available in this test environment and would error.
+		client, err := newClientFromStoredAWSConfig(config)
+		require.NoError(t, err)
+		assert.True(t, client.preferCachedToken)
+	})
+
+	t.Run("newClientFromStoredAzureConfig sets preferCachedToken", func(t *testing.T) {
+		tempDir := t.TempDir()
+		config := Config{
+			ServiceID:         "test",
+			AuthnType:         "azure",
+			Account:           "account",
+			ApplianceURL:      "appliance-url",
+			JWTHostID:         "test-host",
+			CredentialStorage: "file",
+			NetRCPath:         filepath.Join(tempDir, ".netrc"),
+		}
+		storageProvider, err := createStorageProvider(config)
+		require.NoError(t, err)
+		require.NoError(t, storageProvider.StoreAuthnToken([]byte(sample_token)))
+
+		client, err := newClientFromStoredAzureConfig(config)
+		require.NoError(t, err)
+		assert.True(t, client.preferCachedToken)
+	})
+
+	t.Run("newClientFromStoredGCPConfig sets preferCachedToken", func(t *testing.T) {
+		tempDir := t.TempDir()
+		config := Config{
+			ServiceID:         "test",
+			AuthnType:         "gcp",
+			Account:           "account",
+			ApplianceURL:      "appliance-url",
+			JWTHostID:         "test-host",
+			CredentialStorage: "file",
+			NetRCPath:         filepath.Join(tempDir, ".netrc"),
+		}
+		storageProvider, err := createStorageProvider(config)
+		require.NoError(t, err)
+		require.NoError(t, storageProvider.StoreAuthnToken([]byte(sample_token)))
+
+		client, err := newClientFromStoredGCPConfig(config)
+		require.NoError(t, err)
+		assert.True(t, client.preferCachedToken)
+	})
+}
+
 func Test_newClientFromStoredCredentials(t *testing.T) {
 	tempDir := t.TempDir()
 	config := Config{

@@ -48,6 +48,14 @@ type Client struct {
 	storage       CredentialStorageProvider
 	conjurVersion string
 
+	// preferCachedToken is set only when a client is reconstructed from a
+	// previously stored session (see the newClientFromStored* helpers) with
+	// no new credentials supplied. It allows RefreshToken to reuse a cached
+	// access token instead of invoking the authenticator. Constructors that
+	// receive explicit credentials (API key, AWS/Azure/GCP creds, OIDC code)
+	// must leave this false so the supplied credentials are always used.
+	preferCachedToken bool
+
 	// Sub-client for v2 API operations
 	v2 *ClientV2
 }
@@ -383,6 +391,7 @@ func newClientFromStoredOidcCredentials(config Config, telemetry ...Telemetry) (
 	if err != nil {
 		return nil, err
 	}
+	client.preferCachedToken = true
 	token := client.readCachedAccessToken()
 	if token != nil && !token.ShouldRefresh() {
 		return client, nil
@@ -397,6 +406,7 @@ func newClientFromStoredAWSConfig(config Config, telemetry ...Telemetry) (*Clien
 	if err != nil {
 		return nil, err
 	}
+	client.preferCachedToken = true
 
 	// RefreshToken() will first check for a cached token
 	// If not found it will go through the authenticator
@@ -413,6 +423,7 @@ func newClientFromStoredAzureConfig(config Config, telemetry ...Telemetry) (*Cli
 	if err != nil {
 		return nil, err
 	}
+	client.preferCachedToken = true
 
 	// RefreshToken() will first check for a cached token
 	// If not found it will go through the authenticator
@@ -429,6 +440,7 @@ func newClientFromStoredGCPConfig(config Config, telemetry ...Telemetry) (*Clien
 	if err != nil {
 		return nil, err
 	}
+	client.preferCachedToken = true
 
 	// RefreshToken() will first check for a cached token
 	// If not found it will go through the authenticator
