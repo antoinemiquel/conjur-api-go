@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.15.6] - 2026-08-04
+
+### Changed
+- A cached access token is now reused only when the client was reconstructed
+  from a previously stored session (`newClientFromStored*`). Clients built with
+  explicit credentials always re-authenticate instead of preferring a cached
+  token. (CNJR-14441)
+
+### Fixed
+- `Config.SetIntegrationVersion` now logs directory and release-version read
+  failures via `logging.ApiLog.Debugf` instead of discarding the `fmt.Errorf`
+  results. (CNJR-14441)
+
 ## [0.15.5] - 2026-07-23
 
 ### Fixed
