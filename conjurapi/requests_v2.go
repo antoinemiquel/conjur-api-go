@@ -1,8 +1,6 @@
 package conjurapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -13,90 +11,36 @@ const v2APIOutgoingHeaderID string = "Accept"
 const v2APIIncomingHeaderID string = "Content-Type"
 
 func (c *ClientV2) CreateAuthenticatorRequest(authenticator *AuthenticatorBase) (*http.Request, error) {
-	body, err := json.Marshal(authenticator)
-
+	request, err := newV2JSONRequest(http.MethodPost, c.authenticatorsURL("", ""), authenticator, v2APIHeaderBeta)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal authenticator request: %w", err)
 	}
-
-	request, err := http.NewRequest(
-		http.MethodPost,
-		c.authenticatorsURL("", ""),
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add("Content-Type", "application/json")
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-
 	return request, nil
 }
 
 func (c *ClientV2) GetAuthenticatorRequest(authenticatorType string, serviceID string) (*http.Request, error) {
-	request, err := http.NewRequest(
-		http.MethodGet,
-		c.authenticatorsURL(authenticatorType, serviceID),
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-
-	return request, nil
+	return newV2Request(http.MethodGet, c.authenticatorsURL(authenticatorType, serviceID), v2APIHeaderBeta)
 }
 
 func (c *ClientV2) UpdateAuthenticatorRequest(authenticatorType string, serviceID string, enabled bool) (*http.Request, error) {
-	body, err := json.Marshal(map[string]bool{"enabled": enabled})
+	request, err := newV2JSONRequest(
+		http.MethodPatch,
+		c.authenticatorsURL(authenticatorType, serviceID),
+		map[string]bool{"enabled": enabled},
+		v2APIHeaderBeta,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal authenticator update request: %w", err)
 	}
-
-	request, err := http.NewRequest(
-		http.MethodPatch,
-		c.authenticatorsURL(authenticatorType, serviceID),
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	request.Header.Add("Content-Type", "application/json")
 	return request, nil
 }
 
 func (c *ClientV2) DeleteAuthenticatorRequest(authenticatorType string, serviceID string) (*http.Request, error) {
-	request, err := http.NewRequest(
-		http.MethodDelete,
-		c.authenticatorsURL(authenticatorType, serviceID),
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-
-	return request, nil
+	return newV2Request(http.MethodDelete, c.authenticatorsURL(authenticatorType, serviceID), v2APIHeaderBeta)
 }
 
 func (c *ClientV2) ListAuthenticatorsRequest() (*http.Request, error) {
-	request, err := http.NewRequest(
-		http.MethodGet,
-		c.authenticatorsURL("", ""),
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-
-	return request, nil
+	return newV2Request(http.MethodGet, c.authenticatorsURL("", ""), v2APIHeaderBeta)
 }
 
 func (c *ClientV2) authenticatorsURL(authenticatorType string, serviceID string) string {

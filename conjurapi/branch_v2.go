@@ -1,8 +1,6 @@
 package conjurapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -43,23 +41,7 @@ func (c *ClientV2) CreateBranch(branch Branch) (*Branch, error) {
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	branchResp := Branch{}
-	err = json.Unmarshal(bodyData, &branchResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &branchResp, nil
+	return submitAndUnmarshal[Branch](c, req)
 }
 
 func (c *ClientV2) ReadBranch(identifier string) (*Branch, error) {
@@ -72,49 +54,24 @@ func (c *ClientV2) ReadBranch(identifier string) (*Branch, error) {
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	branchResp := Branch{}
-	err = json.Unmarshal(bodyData, &branchResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &branchResp, nil
+	return submitAndUnmarshal[Branch](c, req)
 }
 
 func (c *ClientV2) ReadBranches(filter *BranchFilter) (BranchesResponse, error) {
-	branchResp := BranchesResponse{}
 	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
-		return branchResp, fmt.Errorf(NotSupportedInOldVersions, "Branch API", MinVersion)
+		return BranchesResponse{}, fmt.Errorf(NotSupportedInOldVersions, "Branch API", MinVersion)
 	}
 
 	req, err := c.ReadBranchesRequest(filter)
 	if err != nil {
-		return branchResp, err
+		return BranchesResponse{}, err
 	}
 
-	resp, err := c.SubmitRequest(req)
+	branchResp, err := submitAndUnmarshal[BranchesResponse](c, req)
 	if err != nil {
-		return branchResp, err
+		return BranchesResponse{}, err
 	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return branchResp, err
-	}
-
-	err = json.Unmarshal(bodyData, &branchResp)
-
-	return branchResp, err
+	return *branchResp, nil
 }
 
 func (c *ClientV2) UpdateBranch(branch Branch) ([]byte, error) {
@@ -158,23 +115,7 @@ func (c *ClientV2) CreateBranchRequest(branch Branch) (*http.Request, error) {
 		return nil, err
 	}
 
-	branchJson, err := json.Marshal(branch)
-	if err != nil {
-		return nil, err
-	}
-
-	request, err := http.NewRequest(
-		http.MethodPost,
-		c.branchesURL(),
-		bytes.NewBuffer(branchJson),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add("Content-Type", "application/json")
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	return request, nil
+	return newV2JSONRequest(http.MethodPost, c.branchesURL(), branch, v2APIHeaderBeta)
 }
 
 func (c *ClientV2) ReadBranchRequest(identifier string) (*http.Request, error) {
@@ -182,17 +123,7 @@ func (c *ClientV2) ReadBranchRequest(identifier string) (*http.Request, error) {
 		return nil, fmt.Errorf("Must specify an identifier")
 	}
 
-	request, err := http.NewRequest(
-		http.MethodGet,
-		c.branchURL(identifier),
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	return request, nil
+	return newV2Request(http.MethodGet, c.branchURL(identifier), v2APIHeaderBeta)
 }
 
 func (c *ClientV2) ReadBranchesRequest(filter *BranchFilter) (*http.Request, error) {
@@ -213,17 +144,7 @@ func (c *ClientV2) ReadBranchesRequest(filter *BranchFilter) (*http.Request, err
 		requestURL = fmt.Sprintf("%s?%s", baseURL, encoded)
 	}
 
-	request, err := http.NewRequest(
-		http.MethodGet,
-		requestURL,
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	return request, nil
+	return newV2Request(http.MethodGet, requestURL, v2APIHeaderBeta)
 }
 
 func (c *ClientV2) UpdateBranchRequest(branchName string, owner *Owner, annotations map[string]string) (*http.Request, error) {
@@ -235,23 +156,7 @@ func (c *ClientV2) UpdateBranchRequest(branchName string, owner *Owner, annotati
 		Annotations: annotations,
 	}
 
-	branchJson, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	request, err := http.NewRequest(
-		http.MethodPatch,
-		c.branchURL(branchName),
-		bytes.NewBuffer(branchJson),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add("Content-Type", "application/json")
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	return request, nil
+	return newV2JSONRequest(http.MethodPatch, c.branchURL(branchName), payload, v2APIHeaderBeta)
 }
 
 func (c *ClientV2) DeleteBranchRequest(identifier string) (*http.Request, error) {
@@ -259,17 +164,7 @@ func (c *ClientV2) DeleteBranchRequest(identifier string) (*http.Request, error)
 		return nil, fmt.Errorf("Must specify an Identifier")
 	}
 
-	request, err := http.NewRequest(
-		http.MethodDelete,
-		c.branchURL(identifier),
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	return request, nil
+	return newV2Request(http.MethodDelete, c.branchURL(identifier), v2APIHeaderBeta)
 }
 
 func (b Branch) Validate() error {

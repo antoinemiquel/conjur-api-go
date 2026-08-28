@@ -1,13 +1,9 @@
 package conjurapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-
-	"github.com/cyberark/conjur-api-go/conjurapi/response"
 )
 
 type Subject struct {
@@ -46,31 +42,14 @@ func (c *ClientV2) CreateStaticSecretRequest(secret StaticSecret) (*http.Request
 		return nil, err
 	}
 
-	branchJson, err := json.Marshal(secret)
-	if err != nil {
-		return nil, err
-	}
-
 	secretURL := makeRouterURL(c.config.ApplianceURL, "secrets/static").String()
 
-	request, err := http.NewRequest(
-		http.MethodPost,
-		secretURL,
-		bytes.NewBuffer(branchJson),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add("Content-Type", "application/json")
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeader)
-
-	return request, nil
+	return newV2JSONRequest(http.MethodPost, secretURL, secret, v2APIHeader)
 }
 
 func (c *ClientV2) CreateStaticSecret(secret StaticSecret) (*StaticSecretResponse, error) {
 	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf("StaticSecret API %s", NotSupportedInConjurEnterprise)
+		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "StaticSecret API")
 	}
 
 	req, err := c.CreateStaticSecretRequest(secret)
@@ -78,23 +57,7 @@ func (c *ClientV2) CreateStaticSecret(secret StaticSecret) (*StaticSecretRespons
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	secretResp := StaticSecretResponse{}
-	err = json.Unmarshal(bodyData, &secretResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &secretResp, nil
+	return submitAndUnmarshal[StaticSecretResponse](c, req)
 }
 
 func (c *ClientV2) GetStaticSecretDetailsRequest(identifier string) (*http.Request, error) {
@@ -106,23 +69,12 @@ func (c *ClientV2) GetStaticSecretDetailsRequest(identifier string) (*http.Reque
 
 	secretURL := makeRouterURL(c.config.ApplianceURL, path).String()
 
-	request, err := http.NewRequest(
-		http.MethodGet,
-		secretURL,
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeader)
-
-	return request, nil
+	return newV2Request(http.MethodGet, secretURL, v2APIHeader)
 }
 
 func (c *ClientV2) GetStaticSecretDetails(identifier string) (*StaticSecretResponse, error) {
 	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf("StaticSecret API %s", NotSupportedInConjurEnterprise)
+		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "StaticSecret API")
 	}
 
 	req, err := c.GetStaticSecretDetailsRequest(identifier)
@@ -130,23 +82,7 @@ func (c *ClientV2) GetStaticSecretDetails(identifier string) (*StaticSecretRespo
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	secretResp := StaticSecretResponse{}
-	err = json.Unmarshal(bodyData, &secretResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &secretResp, nil
+	return submitAndUnmarshal[StaticSecretResponse](c, req)
 }
 
 func (c *ClientV2) GetStaticSecretPermissionsRequest(identifier string) (*http.Request, error) {
@@ -158,23 +94,12 @@ func (c *ClientV2) GetStaticSecretPermissionsRequest(identifier string) (*http.R
 
 	secretURL := makeRouterURL(c.config.ApplianceURL, path).String()
 
-	request, err := http.NewRequest(
-		http.MethodGet,
-		secretURL,
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeader)
-
-	return request, nil
+	return newV2Request(http.MethodGet, secretURL, v2APIHeader)
 }
 
 func (c *ClientV2) GetStaticSecretPermissions(identifier string) (*PermissionResponse, error) {
 	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf("StaticSecret API %s", NotSupportedInConjurEnterprise)
+		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "StaticSecret API")
 	}
 
 	req, err := c.GetStaticSecretPermissionsRequest(identifier)
@@ -182,23 +107,7 @@ func (c *ClientV2) GetStaticSecretPermissions(identifier string) (*PermissionRes
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	permissionsResp := PermissionResponse{}
-	err = json.Unmarshal(bodyData, &permissionsResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &permissionsResp, nil
+	return submitAndUnmarshal[PermissionResponse](c, req)
 }
 
 func (s StaticSecret) Validate() error {

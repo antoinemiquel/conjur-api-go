@@ -1,8 +1,6 @@
 package conjurapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -92,21 +90,9 @@ func (c *ClientV2) CreateWorkloadRequest(workload Workload) (*http.Request, erro
 		workload.Type = "other"
 	}
 
-	payload, err := json.Marshal(workload)
-	if err != nil {
-		return nil, err
-	}
-
 	fullURL := makeRouterURL(c.config.ApplianceURL, "workloads").String()
 
-	req, err := http.NewRequest(http.MethodPost, fullURL, bytes.NewBuffer(payload))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	return req, nil
+	return newV2JSONRequest(http.MethodPost, fullURL, workload, v2APIHeaderBeta)
 }
 
 func (c *ClientV2) DeleteWorkloadRequest(workloadID string) (*http.Request, error) {
@@ -115,13 +101,7 @@ func (c *ClientV2) DeleteWorkloadRequest(workloadID string) (*http.Request, erro
 	}
 
 	fullURL := makeRouterURL(c.config.ApplianceURL, "workloads", url.QueryEscape(workloadID)).String()
-	req, err := http.NewRequest(http.MethodDelete, fullURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	return req, nil
+	return newV2Request(http.MethodDelete, fullURL, v2APIHeaderBeta)
 }
 
 func (w Workload) Validate() error {

@@ -1,12 +1,8 @@
 package conjurapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/cyberark/conjur-api-go/conjurapi/response"
 )
 
 type BatchSecretRequest struct {
@@ -36,23 +32,7 @@ func (c *ClientV2) BatchRetrieveSecrets(identifiers []string) (*BatchSecretRespo
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	batchResp := BatchSecretResponse{}
-	err = json.Unmarshal(bodyData, &batchResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &batchResp, nil
+	return submitAndUnmarshal[BatchSecretResponse](c, req)
 }
 
 func (c *ClientV2) BatchRetrieveSecretsRequest(identifiers []string) (*http.Request, error) {
@@ -62,22 +42,11 @@ func (c *ClientV2) BatchRetrieveSecretsRequest(identifiers []string) (*http.Requ
 	}
 
 	batchRequest := BatchSecretRequest{IDs: validatedIDs}
-	payload, err := json.Marshal(batchRequest)
-	if err != nil {
-		return nil, err
-	}
 
-	req, err := http.NewRequest(
-		http.MethodPost,
-		c.batchSecretsURL(),
-		bytes.NewBuffer(payload),
-	)
+	req, err := newV2JSONRequest(http.MethodPost, c.batchSecretsURL(), batchRequest, v2APIHeaderBeta)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create batch retrieve secrets request: %w", err)
 	}
-
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
 
 	return req, nil
 }

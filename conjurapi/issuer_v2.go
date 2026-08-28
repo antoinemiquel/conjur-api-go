@@ -1,11 +1,8 @@
 package conjurapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/cyberark/conjur-api-go/conjurapi/response"
 	"net/http"
 )
 
@@ -83,32 +80,17 @@ func (c *ClientV2) CertificateIssueRequest(issuerName string, issue Issue) (*htt
 		return nil, err
 	}
 
-	issueJSON, err := json.Marshal(issue)
-
 	path := fmt.Sprintf("issuers/%s/issue", issuerName)
-	//path := "issue"
 
 	c.issuersURL(c.config.Account)
 	branchURL := makeRouterURL(c.config.ApplianceURL, path).String()
 
-	request, err := http.NewRequest(
-		http.MethodPost,
-		branchURL,
-		bytes.NewBuffer(issueJSON),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	request.Header.Add("Content-Type", "application/json")
-
-	return request, nil
+	return newV2JSONRequest(http.MethodPost, branchURL, issue, v2APIHeaderBeta)
 }
 
 func (c *ClientV2) CertificateIssue(issuerName string, issue Issue) (*CertificateResponse, error) {
 	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf("Issue API %s", NotSupportedInConjurEnterprise)
+		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "Issue API")
 	}
 
 	req, err := c.CertificateIssueRequest(issuerName, issue)
@@ -116,23 +98,7 @@ func (c *ClientV2) CertificateIssue(issuerName string, issue Issue) (*Certificat
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	issueResp := CertificateResponse{}
-	err = json.Unmarshal(bodyData, &issueResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &issueResp, nil
+	return submitAndUnmarshal[CertificateResponse](c, req)
 }
 
 func (c *ClientV2) CertificateSignRequest(issuerName string, sign Sign) (*http.Request, error) {
@@ -141,30 +107,16 @@ func (c *ClientV2) CertificateSignRequest(issuerName string, sign Sign) (*http.R
 		return nil, err
 	}
 
-	signJSON, err := json.Marshal(sign)
-
 	path := fmt.Sprintf("issuers/%s/sign", issuerName)
 
 	branchURL := makeRouterURL(c.config.ApplianceURL, path).String()
 
-	request, err := http.NewRequest(
-		http.MethodPost,
-		branchURL,
-		bytes.NewBuffer(signJSON),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	request.Header.Add("Content-Type", "application/json")
-
-	return request, nil
+	return newV2JSONRequest(http.MethodPost, branchURL, sign, v2APIHeaderBeta)
 }
 
 func (c *ClientV2) CertificateSign(issuerName string, sign Sign) (*CertificateResponse, error) {
 	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf("Issue API %s", NotSupportedInConjurEnterprise)
+		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "Issue API")
 	}
 
 	req, err := c.CertificateSignRequest(issuerName, sign)
@@ -172,21 +124,5 @@ func (c *ClientV2) CertificateSign(issuerName string, sign Sign) (*CertificateRe
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	bodyData, err := response.DataResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	issueResp := CertificateResponse{}
-	err = json.Unmarshal(bodyData, &issueResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &issueResp, nil
+	return submitAndUnmarshal[CertificateResponse](c, req)
 }
