@@ -63,7 +63,7 @@ func SecretDataResponse(resp *http.Response) (io.ReadCloser, error) {
 // JSONResponse checks the HTTP status of the response. If it's less than
 // 300, it returns the response body as JSON. Otherwise it returns
 // a NewConjurError.
-func JSONResponse(resp *http.Response, obj interface{}) error {
+func JSONResponse(resp *http.Response, obj any) error {
 	logResponse(resp)
 	if resp.StatusCode < 300 {
 		body, err := readBody(resp)

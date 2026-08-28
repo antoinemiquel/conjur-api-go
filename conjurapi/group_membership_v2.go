@@ -1,8 +1,6 @@
 package conjurapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -63,18 +61,10 @@ func (c *ClientV2) AddGroupMemberRequest(groupID string, member GroupMember) (*h
 		return nil, err
 	}
 
-	payload, err := json.Marshal(member)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, c.addGroupMembershipURL(groupID), bytes.NewBuffer(payload))
+	req, err := newV2JSONRequest(http.MethodPost, c.addGroupMembershipURL(groupID), member, v2APIHeaderBeta)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create add group member request: %w", err)
 	}
-
-	req.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
-	req.Header.Add(v2APIIncomingHeaderID, "application/json")
 
 	return req, nil
 }
@@ -88,11 +78,10 @@ func (c *ClientV2) RemoveGroupMemberRequest(groupID string, member GroupMember) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, c.removeGroupMembershipURL(groupID, member), nil)
+	req, err := newV2Request(http.MethodDelete, c.removeGroupMembershipURL(groupID, member), v2APIHeaderBeta)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create remove group member request: %v", err)
 	}
-	req.Header.Add(v2APIOutgoingHeaderID, v2APIHeaderBeta)
 
 	return req, nil
 }
