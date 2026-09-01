@@ -133,9 +133,9 @@ func TestCreateWorkloadRequest_JenkinsJWTWithAnnotationsSuccess(t *testing.T) {
 		if ad.Type != "authn-jwt" || ad.ServiceID != "jwt_service" {
 			t.Errorf("Unexpected authn descriptor: %+v", ad)
 		}
-		if ad.Data == nil || ad.Data.Claims["jenkins_task_noun"] != "Build" ||
-			ad.Data.Claims["jenkins_pronoun"] != "CC" ||
-			ad.Data.Claims["jenkins_parent_full_name"] != "/main" {
+		if ad.Data == nil || ad.Data["jenkins_task_noun"] != "Build" ||
+			ad.Data["jenkins_pronoun"] != "CC" ||
+			ad.Data["jenkins_parent_full_name"] != "/main" {
 			t.Errorf("Unexpected claims: %+v", ad.Data)
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -158,12 +158,10 @@ func TestCreateWorkloadRequest_JenkinsJWTWithAnnotationsSuccess(t *testing.T) {
 			{
 				Type:      "authn-jwt",
 				ServiceID: "jwt_service",
-				Data: &AuthnDescriptorData{
-					Claims: map[string]string{
-						"jenkins_task_noun":        "Build",
-						"jenkins_pronoun":          "CC",
-						"jenkins_parent_full_name": "/main",
-					},
+				Data: map[string]any{
+					"jenkins_task_noun":        "Build",
+					"jenkins_pronoun":          "CC",
+					"jenkins_parent_full_name": "/main",
 				},
 			},
 		},
@@ -477,6 +475,11 @@ func workloadRequestBuilders(c Client) map[string]func(string) (*http.Request, e
 		"UpdateWorkloadRequest": func(id string) (*http.Request, error) {
 			return c.V2().UpdateWorkloadRequest(id, WorkloadFields{})
 		},
+		"UpdateAuthnDescriptorRequest": func(id string) (*http.Request, error) {
+			return c.V2().UpdateAuthnDescriptorRequest(id, AuthnDescriptor{
+				Type: "jwt", ServiceID: "svc", Data: map[string]any{"claim": "value"},
+			})
+		},
 	}
 }
 
@@ -676,6 +679,11 @@ func TestNewWorkloadEndpoints_AcceptHeader(t *testing.T) {
 		{"UpdateWorkloadRequest", func() (*http.Request, error) {
 			return c.V2().UpdateWorkloadRequest(identifier, WorkloadFields{Annotations: map[string]string{"a": "b"}})
 		}},
+		{"UpdateAuthnDescriptorRequest", func() (*http.Request, error) {
+			return c.V2().UpdateAuthnDescriptorRequest(identifier, AuthnDescriptor{
+				Type: "jwt", ServiceID: "jwt_service", Data: map[string]any{"jenkins_pronoun": "CC"},
+			})
+		}},
 	}
 
 	for _, tc := range cases {
@@ -785,6 +793,112 @@ func TestUpdateWorkloadRequest_RestrictedTo(t *testing.T) {
 	}
 }
 
+func TestUpdateAuthnDescriptorRequest_EndpointAndBody(t *testing.T) {
+	c := newTestClient("http://conjur.test")
+
+	req, err := c.V2().UpdateAuthnDescriptorRequest("data/us-east1/test/new-client", AuthnDescriptor{
+		Type:      "jwt",
+		ServiceID: "Test",
+		Data: map[string]any{
+			"jenkins_task_noun": "Build",
+			"jenkins_pronoun":   "UpdatedCC",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if req.Method != http.MethodPatch {
+		t.Errorf("Expected PATCH, got %s", req.Method)
+	}
+	wantPath := "/workloads/data/us-east1/test/new-client/authn_descriptors/jwt/Test"
+	if req.URL.Path != wantPath {
+		t.Errorf("Unexpected path: %s, want %s", req.URL.Path, wantPath)
+	}
+	body, _ := io.ReadAll(req.Body)
+	assert.JSONEq(t, `{"jenkins_task_noun":"Build","jenkins_pronoun":"UpdatedCC"}`, string(body))
+}
+
+// TestUpdateAuthnDescriptorRequest_RejectsDotDotTargets asserts that a ".."
+// (or ".") authn type or service ID is rejected before path.Join can resolve
+// it past the "/authn_descriptors" prefix onto an unrelated path. The
+// identifier equivalent is covered by
+// TestWorkloadRequests_RejectInvalidIdentifiers.
+func TestUpdateAuthnDescriptorRequest_RejectsDotDotTargets(t *testing.T) {
+	c := newTestClient("http://conjur.test")
+
+	data := map[string]any{"claim": "value"}
+	for _, descriptor := range []AuthnDescriptor{
+		{Type: "..", ServiceID: "svc", Data: data},
+		{Type: "jwt", ServiceID: "..", Data: data},
+	} {
+		_, err := c.V2().UpdateAuthnDescriptorRequest("data/w", descriptor)
+		if err == nil {
+			t.Errorf("Expected error for %+v, got none", descriptor)
+		}
+	}
+}
+
+// TestUpdateAuthnDescriptorRequest_NonFlatData asserts non-flat descriptor data.
+func TestUpdateAuthnDescriptorRequest_NonFlatData(t *testing.T) {
+	c := newTestClient("http://conjur.test")
+
+	req, err := c.V2().UpdateAuthnDescriptorRequest("data/us-east1/test/new-client", AuthnDescriptor{
+		Type:      "certificate",
+		ServiceID: "svc-cert",
+		Data: map[string]any{
+			"san_uri": []string{"https://conjur.org"},
+			"cn":      "web-service-123",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	body, _ := io.ReadAll(req.Body)
+	assert.JSONEq(t, `{"san_uri":["https://conjur.org"],"cn":"web-service-123"}`, string(body))
+}
+
+// TestUpdateAuthnDescriptorRequest_MissingFieldsError asserts that each field
+// needed to address and update a descriptor is required. Both a nil and a
+// non-nil empty data map are rejected: an empty-map PATCH is a server-side
+// no-op, not a way to clear a descriptor's data,
+// so accepting it here would silently mislead callers.
+func TestUpdateAuthnDescriptorRequest_MissingFieldsError(t *testing.T) {
+	c := newTestClient("http://conjur.test")
+
+	data := map[string]any{"claim": "value"}
+	cases := []struct {
+		descriptor  AuthnDescriptor
+		wantMessage string
+	}{
+		{AuthnDescriptor{ServiceID: "svc", Data: data}, "authn descriptor type"},
+		{AuthnDescriptor{Type: "jwt", Data: data}, "authn descriptor service ID"},
+		{AuthnDescriptor{Type: "jwt", ServiceID: "svc"}, "authn descriptor data"},
+		{AuthnDescriptor{Type: "jwt", ServiceID: "svc", Data: map[string]any{}}, "authn descriptor data"},
+	}
+	for _, tc := range cases {
+		_, err := c.V2().UpdateAuthnDescriptorRequest("data/w", tc.descriptor)
+		if err == nil || !strings.Contains(err.Error(), tc.wantMessage) {
+			t.Errorf("%+v: expected error mentioning %q, got %v", tc.descriptor, tc.wantMessage, err)
+		}
+	}
+}
+
+// TestUpdateAuthnDescriptorRequest_UnmarshalableDataError asserts that a
+// json.Marshal failure on the descriptor data is
+// surfaced as an error rather than panicking or silently dropping data.
+func TestUpdateAuthnDescriptorRequest_UnmarshalableDataError(t *testing.T) {
+	c := newTestClient("http://conjur.test")
+
+	_, err := c.V2().UpdateAuthnDescriptorRequest("data/w", AuthnDescriptor{
+		Type:      "jwt",
+		ServiceID: "svc",
+		Data:      map[string]any{"bad": make(chan int)},
+	})
+	if err == nil {
+		t.Errorf("Expected a JSON marshal error, got nil")
+	}
+}
+
 func TestDeleteWorkloadRequest_Forbidden403(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "protected") {
@@ -816,6 +930,77 @@ func TestDeleteWorkloadRequest_Forbidden403(t *testing.T) {
 // the full SubmitRequest -> authenticate -> parse-response path using
 // newWorkloadMockServer's authenticated SaaS client, catching bugs in the
 // IsSaaS gate or in response handling.
+
+// getWorkloadResponseBody is a GET /workloads/<identifier> response body copied
+// from a live Conjur Cloud tenant: the server adds authentication_source,
+// identity_source and created_at to what was sent on create, returns
+// annotations as {} rather than omitting it, and exposes the api_key
+// descriptor's live API key as its data.
+const getWorkloadResponseBody = `{
+  "name": "scratch-workload",
+  "branch": "data/test",
+  "type": "other",
+  "annotations": {},
+  "authn_descriptors": [
+    {
+      "type": "jwt",
+      "service_id": "scratch-workload-jwt",
+      "data": { "aud": "a1", "sub": "v1" }
+    },
+    {
+      "type": "api_key",
+      "data": { "value": "2wq7pt1v9y4qz3f1h8kbv0" }
+    }
+  ],
+  "authentication_source": "any",
+  "identity_source": "sms",
+  "created_at": "2026-08-31T07:44:09.424+00:00"
+}`
+
+func TestGetWorkload_EndToEnd(t *testing.T) {
+	c := newWorkloadMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("Expected GET, got %s", r.Method)
+		}
+		if r.URL.Path != "/workloads/data/test/scratch-workload" {
+			t.Errorf("Unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get(v2APIOutgoingHeaderID); got != v2APIHeader {
+			t.Errorf("Accept header = %q, want %q", got, v2APIHeader)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(getWorkloadResponseBody))
+	})
+
+	workload, err := c.V2().GetWorkload("data/test/scratch-workload")
+	require.NoError(t, err)
+
+	assert.Equal(t, "scratch-workload", workload.Name)
+	assert.Equal(t, "data/test", workload.Branch)
+	assert.Equal(t, "other", workload.Type)
+	// An empty annotations object must decode to an empty map, not stay nil,
+	// so callers can tell "no annotations" from "field absent".
+	assert.NotNil(t, workload.Annotations)
+	assert.Empty(t, workload.Annotations)
+
+	// The server-supplied attributes are the reason GetWorkload exists: none of
+	// them can be known from the create request alone.
+	assert.Equal(t, "any", workload.AuthenticationSource)
+	assert.Equal(t, "sms", workload.IdentitySource)
+	assert.Equal(t, "2026-08-31T07:44:09.424+00:00", workload.CreatedAt)
+
+	require.Len(t, workload.AuthnDescriptors, 2)
+	jwtDescriptor := workload.AuthnDescriptors[0]
+	assert.Equal(t, "jwt", jwtDescriptor.Type)
+	assert.Equal(t, "scratch-workload-jwt", jwtDescriptor.ServiceID)
+	assert.Equal(t, map[string]any{"aud": "a1", "sub": "v1"}, jwtDescriptor.Data)
+
+	// An api_key descriptor has no service_id, and its data is the live API key.
+	apiKeyDescriptor := workload.AuthnDescriptors[1]
+	assert.Equal(t, "api_key", apiKeyDescriptor.Type)
+	assert.Empty(t, apiKeyDescriptor.ServiceID)
+	assert.Equal(t, map[string]any{"value": "2wq7pt1v9y4qz3f1h8kbv0"}, apiKeyDescriptor.Data)
+}
 
 // TestGetWorkload_IdentifierEncodingEndToEnd asserts that the path the server
 // actually receives is correct for both a branch-path identifier - "/"
@@ -947,6 +1132,12 @@ func TestWorkloadWrappers_PropagateRequestBuildErrors(t *testing.T) {
 			_, err := c.V2().UpdateWorkload("", WorkloadFields{})
 			return err
 		}},
+		{"UpdateAuthnDescriptor", "Workload ID", func() error {
+			_, err := c.V2().UpdateAuthnDescriptor("", AuthnDescriptor{
+				Type: "jwt", ServiceID: "svc", Data: map[string]any{"a": "b"},
+			})
+			return err
+		}},
 	}
 
 	for _, tc := range cases {
@@ -985,6 +1176,31 @@ func TestUpdateWorkload_InvalidResponseBodyError(t *testing.T) {
 	}
 }
 
+// TestUpdateAuthnDescriptor_EndToEnd mocks the actual response shape the
+// server returns for this endpoint - {"authn_descriptor": {...}}, a single
+// descriptor, not a Workload.
+func TestUpdateAuthnDescriptor_EndToEnd(t *testing.T) {
+	c := newWorkloadMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Errorf("Expected PATCH, got %s", r.Method)
+		}
+		wantPath := "/workloads/data/w/authn_descriptors/jwt/Test"
+		if r.URL.Path != wantPath {
+			t.Errorf("Unexpected path: %s, want %s", r.URL.Path, wantPath)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"authn_descriptor":{"type":"jwt","service_id":"Test","data":{"jenkins_pronoun":"CC"}}}`))
+	})
+
+	descriptor, err := c.V2().UpdateAuthnDescriptor("data/w", AuthnDescriptor{
+		Type: "jwt", ServiceID: "Test", Data: map[string]any{"jenkins_pronoun": "CC"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "jwt", descriptor.Type)
+	assert.Equal(t, "Test", descriptor.ServiceID)
+	assert.Equal(t, "CC", descriptor.Data["jenkins_pronoun"])
+}
+
 // TestWorkloadWrapperMethods_RejectNonSaaS asserts that every new top-level
 // wrapper method's IsSaaS guard actually rejects a non-SaaS client.
 func TestWorkloadWrapperMethods_RejectNonSaaS(t *testing.T) {
@@ -998,6 +1214,12 @@ func TestWorkloadWrapperMethods_RejectNonSaaS(t *testing.T) {
 		{"DeleteWorkload", func() error { _, err := c.V2().DeleteWorkload("data/w"); return err }},
 		{"GetWorkload", func() error { _, err := c.V2().GetWorkload("data/w"); return err }},
 		{"UpdateWorkload", func() error { _, err := c.V2().UpdateWorkload("data/w", WorkloadFields{}); return err }},
+		{"UpdateAuthnDescriptor", func() error {
+			_, err := c.V2().UpdateAuthnDescriptor("data/w", AuthnDescriptor{
+				Type: "jwt", ServiceID: "svc", Data: map[string]any{"a": "b"},
+			})
+			return err
+		}},
 	}
 
 	for _, tc := range cases {
@@ -1008,4 +1230,131 @@ func TestWorkloadWrapperMethods_RejectNonSaaS(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ---- Real e2e tests against a live Conjur instance ----
+//
+// Tests below run against CONJUR_APPLIANCE_URL (see NewTestUtils), not a mock.
+// They include a NotSupportedOnPrem gate test (skips on SaaS)
+// and a Lifecycle test (skips off SaaS) covering the same routes as
+// TestNewWorkloadEndpoints_AcceptHeader.
+
+// workloadTestPolicy establishes the data/test branch for workload tests.
+var workloadTestPolicy = `--- []`
+
+// TestClientV2_WorkloadEndpointsNotSupportedOnPrem asserts the SaaS gate
+// against a real Conjur Enterprise/OSS instance. Every workload method must
+// refuse to talk to it rather than issuing a request that would 404.
+func TestClientV2_WorkloadEndpointsNotSupportedOnPrem(t *testing.T) {
+	utils, err := NewTestUtils(&Config{})
+	require.NoError(t, err)
+
+	conjur := utils.Client().V2()
+	if conjur.config.IsSaaS() {
+		t.Skip("Skipping on Secrets Manager SaaS: the workload API is supported there")
+	}
+
+	const identifier = "data/test/my-workload"
+
+	var errs []error
+	collect := func(err error) { errs = append(errs, err) }
+
+	_, err = conjur.GetWorkload(identifier)
+	collect(err)
+	_, err = conjur.UpdateWorkload(identifier, WorkloadFields{})
+	collect(err)
+	_, err = conjur.UpdateAuthnDescriptor(identifier, AuthnDescriptor{
+		Type: "jwt", ServiceID: "Test", Data: map[string]any{"a": "b"},
+	})
+	collect(err)
+
+	for i, err := range errs {
+		require.Error(t, err, "call %d should be rejected off SaaS", i)
+		assert.Contains(t, err.Error(), "Workload API")
+		assert.Contains(t, err.Error(), "is not supported in Idira Secrets Manager/Conjur OSS")
+	}
+}
+
+// TestClientV2_WorkloadLifecycle exercises the workload v2 methods against a
+// real Conjur Cloud (SaaS) instance: create, bulk PATCH, and delete.
+//
+// This only uses api_key descriptors. Data-bearing descriptor types (jwt,
+// gcp, azure, certificate) require a real, already-configured authenticator
+// service matching the descriptor's service_id, which this test doesn't
+// provision; that coverage (single-descriptor PATCH, and bulk PATCH removing
+// a data-bearing descriptor) lives in the mocked tests instead
+// (TestUpdateAuthnDescriptorRequest_*, TestUpdateAuthnDescriptor_EndToEnd).
+func TestClientV2_WorkloadLifecycle(t *testing.T) {
+	utils, err := NewTestUtils(&Config{})
+	require.NoError(t, err)
+
+	conjur := utils.Client().V2()
+	if !conjur.config.IsSaaS() {
+		t.Skip("Skipping off Secrets Manager SaaS: the workload API is SaaS-only")
+	}
+
+	_, err = utils.Setup(workloadTestPolicy)
+	require.NoError(t, err)
+
+	branch := utils.PolicyBranch()
+	const workloadName = "api-go-workload-test"
+	identifier := branch + "/" + workloadName
+
+	// Leftovers from an interrupted run would fail the create.
+	_, _ = conjur.DeleteWorkload(identifier)
+
+	_, err = conjur.CreateWorkload(Workload{
+		Branch: branch,
+		Name:   workloadName,
+		Annotations: map[string]string{
+			"team": "api-go-tests",
+		},
+		RestrictedTo:     []string{"127.0.0.1"},
+		AuthnDescriptors: []AuthnDescriptor{{Type: "api_key"}},
+	})
+	require.NoError(t, err)
+
+	// Only fires if the delete subtest below didn't run (an earlier subtest
+	// failed, or the test was interrupted).
+	deleted := false
+	t.Cleanup(func() {
+		if deleted {
+			return
+		}
+		if _, err := conjur.DeleteWorkload(identifier); err != nil {
+			t.Logf("failed to clean up workload %s: %s", identifier, err)
+		}
+	})
+
+	t.Run("read workload returns server-supplied attributes", func(t *testing.T) {
+		read, err := conjur.GetWorkload(identifier)
+		require.NoError(t, err)
+		assert.Equal(t, workloadName, read.Name)
+		assert.Equal(t, branch, read.Branch)
+		assert.Equal(t, "api-go-tests", read.Annotations["team"])
+		// Only the server can supply these, which is the point of the read.
+		assert.NotEmpty(t, read.AuthenticationSource)
+		assert.NotEmpty(t, read.IdentitySource)
+		assert.NotEmpty(t, read.CreatedAt)
+	})
+
+	t.Run("update workload leaves unspecified attributes unchanged", func(t *testing.T) {
+		updated, err := conjur.UpdateWorkload(identifier, WorkloadFields{
+			Annotations: map[string]string{"extra": "added-by-patch"},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "added-by-patch", updated.Annotations["extra"])
+		assert.Equal(t, "api-go-tests", updated.Annotations["team"], "PATCH must not clear an attribute it didn't mention")
+		// The server normalizes bare IPs to CIDR notation.
+		assert.Equal(t, []string{"127.0.0.1/32"}, updated.RestrictedTo)
+	})
+
+	t.Run("delete workload", func(t *testing.T) {
+		_, err := conjur.DeleteWorkload(identifier)
+		require.NoError(t, err)
+		deleted = true
+
+		_, err = conjur.GetWorkload(identifier)
+		assert.Error(t, err, "reading a deleted workload must fail")
+	})
 }

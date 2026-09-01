@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- `ClientV2.GetWorkload` reads a workload.
+- `ClientV2.UpdateWorkload` updates a workload.
+- `ClientV2.UpdateAuthnDescriptor` updates a workload's authentication methods
+  by merging new data into a single method.
+
+### Fixed
+- `AuthnDescriptor.Data` can now include array-valued fields.
+
 ## [0.15.6] - 2026-08-04
 
 ### Changed

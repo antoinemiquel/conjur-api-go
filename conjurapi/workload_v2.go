@@ -6,14 +6,13 @@ import (
 	"net/http"
 )
 
-type AuthnDescriptorData struct {
-	Claims map[string]string `json:"claims,omitempty"`
-}
-
+// AuthnDescriptor describes an authenticator for a workload. Data is a
+// raw map (structure varies by Type) sent flat to the server without
+// a wrapper key: {"type": "jwt", "data": {"claim": "value"}}.
 type AuthnDescriptor struct {
-	Type      string               `json:"type"`
-	ServiceID string               `json:"service_id,omitempty"`
-	Data      *AuthnDescriptorData `json:"data,omitempty"`
+	Type      string         `json:"type"`
+	ServiceID string         `json:"service_id,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
 }
 
 type Workload struct {
@@ -81,12 +80,13 @@ func (c *ClientV2) CreateWorkload(workload Workload) ([]byte, error) {
 	return submitAndReadData(c, req)
 }
 
-func (c *ClientV2) DeleteWorkload(workloadId string) ([]byte, error) {
+// DeleteWorkload deletes a workload.
+func (c *ClientV2) DeleteWorkload(workloadID string) ([]byte, error) {
 	if err := c.requireSaaS(workloadAPIName); err != nil {
 		return nil, err
 	}
 
-	req, err := c.DeleteWorkloadRequest(workloadId)
+	req, err := c.DeleteWorkloadRequest(workloadID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +94,7 @@ func (c *ClientV2) DeleteWorkload(workloadId string) ([]byte, error) {
 	return submitAndReadData(c, req)
 }
 
+// CreateWorkloadRequest builds a request to create a workload.
 func (c *ClientV2) CreateWorkloadRequest(workload Workload) (*http.Request, error) {
 	if err := workload.Validate(); err != nil {
 		return nil, err
@@ -139,9 +140,7 @@ func (c *ClientV2) DeleteWorkloadRequest(identifier string) (*http.Request, erro
 }
 
 // GetWorkload reads a workload and returns it as the server has it, including
-// the attributes the server fills in itself. An api_key descriptor's Data
-// carries the live API key as {"value": "<api key>"}, so a returned Workload is
-// as sensitive as a credential.
+// the attributes the server fills in itself.
 func (c *ClientV2) GetWorkload(identifier string) (*Workload, error) {
 	if err := c.requireSaaS(workloadAPIName); err != nil {
 		return nil, err
@@ -166,7 +165,6 @@ func (c *ClientV2) GetWorkloadRequest(identifier string) (*http.Request, error) 
 }
 
 // UpdateWorkload patches attributes; unset ones remain unchanged.
-// To modify authn_descriptors, send the complete desired array.
 func (c *ClientV2) UpdateWorkload(identifier string, update WorkloadFields) (*Workload, error) {
 	if err := c.requireSaaS(workloadAPIName); err != nil {
 		return nil, err
@@ -194,6 +192,50 @@ func (c *ClientV2) UpdateWorkloadRequest(identifier string, update WorkloadField
 	return newV2JSONRequest(http.MethodPatch, reqURL, update, v2APIHeader)
 }
 
+// authnDescriptorResponse is the response envelope for
+// PATCH /workloads/<identifier>/authn_descriptors/<type>/<serviceID>, which
+// returns the single updated descriptor rather than the whole workload.
+type authnDescriptorResponse struct {
+	AuthnDescriptor AuthnDescriptor `json:"authn_descriptor"`
+}
+
+// UpdateAuthnDescriptor updates the data of a single authn descriptor on a
+// workload and returns the updated descriptor. descriptor.Type and
+// descriptor.ServiceID address the descriptor in the URL; only
+// descriptor.Data is sent as the request body, and the server merges it into
+// the existing map rather than replacing it.
+func (c *ClientV2) UpdateAuthnDescriptor(identifier string, descriptor AuthnDescriptor) (*AuthnDescriptor, error) {
+	if err := c.requireSaaS(workloadAPIName); err != nil {
+		return nil, err
+	}
+
+	req, err := c.UpdateAuthnDescriptorRequest(identifier, descriptor)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := submitAndUnmarshal[authnDescriptorResponse](c, req)
+	if err != nil {
+		return nil, err
+	}
+	return &resp.AuthnDescriptor, nil
+}
+
+// UpdateAuthnDescriptorRequest builds a request to update a single authn
+// descriptor's data (PATCH /workloads/<identifier>/authn_descriptors/<type>/<serviceID>).
+// The server merges data into the existing map rather than replacing it.
+func (c *ClientV2) UpdateAuthnDescriptorRequest(identifier string, descriptor AuthnDescriptor) (*http.Request, error) {
+	if err := descriptor.validateAsUpdateTarget(); err != nil {
+		return nil, err
+	}
+
+	reqURL, err := c.workloadURL(identifier, "authn_descriptors", descriptor.Type, descriptor.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	return newV2JSONRequest(http.MethodPatch, reqURL, descriptor.Data, v2APIHeader)
+}
+
 func (w Workload) Validate() error {
 	var errs []error
 	if w.Branch == "" {
@@ -201,6 +243,25 @@ func (w Workload) Validate() error {
 	}
 	if w.Name == "" {
 		errs = append(errs, fmt.Errorf("Missing required attribute Workload Name"))
+	}
+	return errors.Join(errs...)
+}
+
+// validateAsUpdateTarget checks the fields needed to address an existing
+// descriptor and update it. ServiceID is optional when creating a descriptor
+// (api_key has none) but required here, since it is a URL path component.
+func (d AuthnDescriptor) validateAsUpdateTarget() error {
+	var errs []error
+	if d.Type == "" {
+		errs = append(errs, fmt.Errorf("Must specify an authn descriptor type"))
+	}
+	if d.ServiceID == "" {
+		errs = append(errs, fmt.Errorf("Must specify an authn descriptor service ID"))
+	}
+	// An empty-map PATCH is a server-side no-op, not a way to clear a
+	// descriptor's data, so accepting it here would mislead callers.
+	if len(d.Data) == 0 {
+		errs = append(errs, fmt.Errorf("Must specify authn descriptor data"))
 	}
 	return errors.Join(errs...)
 }
