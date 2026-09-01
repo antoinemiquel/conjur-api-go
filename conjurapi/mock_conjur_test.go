@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cyberark/conjur-api-go/conjurapi/authn"
+	"github.com/stretchr/testify/require"
 )
 
 // Creates a Conjur client that points towards a mock Conjur server.
@@ -228,6 +231,50 @@ var mockRootResponseHTML = `
 
   </body>
 </html>`
+
+// newAuthenticatedMockServer starts an httptest.Server that satisfies the
+// login/authenticate handshake SubmitRequest performs, and delegates every
+// other request to handler. Returns a fully-authenticated Client pointing at
+// it, so tests can exercise wrapper methods end to end rather than only their
+// *Request builders. environment is passed through to Config - pass
+// EnvironmentSaaS for a SaaS-gated API, or "" for the default.
+func newAuthenticatedMockServer(t *testing.T, environment EnvironmentType, handler http.HandlerFunc) *Client {
+	t.Helper()
+	login := testGeneratedSecret()
+	apiKey := testGeneratedSecret()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/authn/conjur/login") {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(apiKey))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/authn/conjur/"+login+"/authenticate") {
+			body, _ := io.ReadAll(r.Body)
+			if string(body) == apiKey {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(mockConjurToken))
+			} else {
+				w.WriteHeader(http.StatusUnauthorized)
+			}
+			return
+		}
+		handler(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	config := Config{
+		Account:           "conjur",
+		ApplianceURL:      srv.URL,
+		Environment:       environment,
+		NetRCPath:         filepath.Join(t.TempDir(), ".netrc"),
+		CredentialStorage: "file",
+	}
+	client, err := NewClientFromKey(config, authn.LoginPair{Login: login, APIKey: apiKey})
+	require.NoError(t, err)
+
+	return client
+}
 
 var mockRootResponseJSON = `{"version": "0.0.dev"}`
 

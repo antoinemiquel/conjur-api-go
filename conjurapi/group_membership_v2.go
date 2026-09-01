@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-
-	"github.com/cyberark/conjur-api-go/conjurapi/response"
 )
 
 type GroupMember struct {
@@ -14,8 +12,6 @@ type GroupMember struct {
 }
 
 func (c *ClientV2) AddGroupMember(groupID string, member GroupMember) (*GroupMember, error) {
-	memberResp := GroupMember{}
-
 	if !c.config.IsSaaS() && c.VerifyMinServerVersion(MinVersion) != nil {
 		return nil, fmt.Errorf(NotSupportedInOldVersions, "Group Membership API", MinVersion)
 	}
@@ -25,12 +21,7 @@ func (c *ClientV2) AddGroupMember(groupID string, member GroupMember) (*GroupMem
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return &memberResp, response.JSONResponse(resp, &memberResp)
+	return submitAndUnmarshal[GroupMember](c, req)
 }
 
 func (c *ClientV2) RemoveGroupMember(groupID string, member GroupMember) ([]byte, error) {
@@ -43,12 +34,7 @@ func (c *ClientV2) RemoveGroupMember(groupID string, member GroupMember) ([]byte
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return response.DataResponse(resp)
+	return submitAndReadData(c, req)
 }
 
 func (c *ClientV2) AddGroupMemberRequest(groupID string, member GroupMember) (*http.Request, error) {

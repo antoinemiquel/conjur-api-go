@@ -23,8 +23,8 @@ type BatchSecretResponse struct {
 const minVersion = "1.24.0"
 
 func (c *ClientV2) BatchRetrieveSecrets(identifiers []string) (*BatchSecretResponse, error) {
-	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "V2 Batch Retrieve Secrets API")
+	if err := c.requireSaaS(batchRetrieveSecretsAPIName); err != nil {
+		return nil, err
 	}
 
 	req, err := c.BatchRetrieveSecretsRequest(identifiers)
