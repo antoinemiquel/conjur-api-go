@@ -4,10 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
-
-	"github.com/cyberark/conjur-api-go/conjurapi/response"
 )
 
 type AuthnDescriptorData struct {
@@ -28,80 +24,174 @@ type Workload struct {
 	Annotations      map[string]string `json:"annotations,omitempty"`
 	AuthnDescriptors []AuthnDescriptor `json:"authn_descriptors"`
 	RestrictedTo     []string          `json:"restricted_to,omitempty"`
+
+	// Server-filled attributes returned by GET/PATCH but never sent on create.
+	// Carried on Workload rather than a separate response type
+	// since the response here is just a superset of the request
+	// All are omitempty, so CreateWorkload payloads are unaffected and a
+	// read-back Workload keeps the values the server filled in.
+	//
+	// AuthenticationSource is also settable via WorkloadFields on PATCH, so
+	// it's exposed here for callers to read back. IdentitySource and
+	// CreatedAt are read-only.
+	AuthenticationSource string `json:"authentication_source,omitempty"`
+	IdentitySource       string `json:"identity_source,omitempty"`
+	CreatedAt            string `json:"created_at,omitempty"`
+}
+
+// WorkloadFields is the PATCH request body. Unset attributes are unchanged
+// on the server.
+//
+// The server's update semantics are not the same for every attribute, and not
+// what the shared endpoint suggests:
+//
+//   - AuthnDescriptors replaces the whole array, and each descriptor's Data with
+//     it. Leaving the attribute unset keeps the existing descriptors; sending a
+//     shorter array deletes the ones left out.
+//   - Annotations merges. A key absent from the map keeps whatever value the
+//     server holds, so an annotation cannot be removed through this endpoint.
+//   - RestrictedTo replaces. Entries are normalized server-side, so "1.2.3.4"
+//     reads back as "1.2.3.4/32".
+type WorkloadFields struct {
+	Annotations      map[string]string `json:"annotations,omitempty"`
+	AuthnDescriptors []AuthnDescriptor `json:"authn_descriptors,omitempty"`
+
+	// RestrictedTo is a pointer so removing every CIDR restriction is
+	// expressible: nil omits the attribute, leaving the server's value alone,
+	// while a pointer to an empty slice sends "restricted_to": [] - omitempty
+	// tests the pointer, not the slice, so the empty slice still reaches the
+	// wire. A plain []string can't express both, since an empty slice is
+	// indistinguishable from a nil one under omitempty, and without it a nil
+	// slice sends null, which the server rejects with a 422.
+	RestrictedTo *[]string `json:"restricted_to,omitempty"`
+
+	AuthenticationSource string `json:"authentication_source,omitempty"`
 }
 
 func (c *ClientV2) CreateWorkload(workload Workload) ([]byte, error) {
-	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "Workload API")
+	if err := c.requireSaaS(workloadAPIName); err != nil {
+		return nil, err
 	}
 
 	req, err := c.CreateWorkloadRequest(workload)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
 
-	return response.DataResponse(resp)
+	return submitAndReadData(c, req)
 }
 
 func (c *ClientV2) DeleteWorkload(workloadId string) ([]byte, error) {
-	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "Workload API")
+	if err := c.requireSaaS(workloadAPIName); err != nil {
+		return nil, err
 	}
 
 	req, err := c.DeleteWorkloadRequest(workloadId)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
 
-	return response.DataResponse(resp)
+	return submitAndReadData(c, req)
 }
 
 func (c *ClientV2) CreateWorkloadRequest(workload Workload) (*http.Request, error) {
-	errors := []string{}
-
-	err := workload.Validate()
-	if err != nil {
+	if err := workload.Validate(); err != nil {
 		return nil, err
 	}
 
 	if len(workload.AuthnDescriptors) == 0 {
-		errors = append(errors, "Must specify at least one authenticator in authn_descriptors")
-	} else {
-		for i, d := range workload.AuthnDescriptors {
-			if d.Type == "" {
-				errors = append(errors, fmt.Sprintf("authn_descriptors[%d] missing type", i))
-			}
-		}
+		return nil, fmt.Errorf("Must specify at least one authenticator in authn_descriptors")
+	}
+	if err := validateAuthnDescriptors(workload.AuthnDescriptors); err != nil {
+		return nil, err
 	}
 
-	if len(errors) > 0 {
-		return nil, fmt.Errorf("%s", strings.Join(errors, " -- "))
-	}
 	// Default type
 	if workload.Type == "" {
 		workload.Type = "other"
 	}
 
-	fullURL := makeRouterURL(c.config.ApplianceURL, "workloads").String()
-
-	return newV2JSONRequest(http.MethodPost, fullURL, workload, v2APIHeaderBeta)
+	return newV2JSONRequest(http.MethodPost, c.workloadsURL(), workload, v2APIHeader)
 }
 
-func (c *ClientV2) DeleteWorkloadRequest(workloadID string) (*http.Request, error) {
-	if workloadID == "" {
-		return nil, fmt.Errorf("Must specify a Workload ID")
+// validateAuthnDescriptors checks the one structural constraint that makes a
+// descriptor unsendable: a missing type. Server-side policy - how many
+// descriptors are allowed, and which types may repeat - is deliberately left
+// to the server, so raising a limit there doesn't require a release of this
+// library and a bump in every consumer that pins it.
+func validateAuthnDescriptors(descriptors []AuthnDescriptor) error {
+	var errs []error
+	for i, d := range descriptors {
+		if d.Type == "" {
+			errs = append(errs, fmt.Errorf("authn_descriptors[%d] missing type", i))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// DeleteWorkloadRequest builds a request to delete a workload.
+func (c *ClientV2) DeleteWorkloadRequest(identifier string) (*http.Request, error) {
+	reqURL, err := c.workloadURL(identifier)
+	if err != nil {
+		return nil, err
+	}
+	return newV2Request(http.MethodDelete, reqURL, v2APIHeader)
+}
+
+// GetWorkload reads a workload and returns it as the server has it, including
+// the attributes the server fills in itself. An api_key descriptor's Data
+// carries the live API key as {"value": "<api key>"}, so a returned Workload is
+// as sensitive as a credential.
+func (c *ClientV2) GetWorkload(identifier string) (*Workload, error) {
+	if err := c.requireSaaS(workloadAPIName); err != nil {
+		return nil, err
 	}
 
-	fullURL := makeRouterURL(c.config.ApplianceURL, "workloads", url.QueryEscape(workloadID)).String()
-	return newV2Request(http.MethodDelete, fullURL, v2APIHeaderBeta)
+	req, err := c.GetWorkloadRequest(identifier)
+	if err != nil {
+		return nil, err
+	}
+
+	return submitAndUnmarshal[Workload](c, req)
+}
+
+// GetWorkloadRequest builds a request to read a single workload
+// (GET /workloads/<identifier>).
+func (c *ClientV2) GetWorkloadRequest(identifier string) (*http.Request, error) {
+	reqURL, err := c.workloadURL(identifier)
+	if err != nil {
+		return nil, err
+	}
+	return newV2Request(http.MethodGet, reqURL, v2APIHeader)
+}
+
+// UpdateWorkload patches attributes; unset ones remain unchanged.
+// To modify authn_descriptors, send the complete desired array.
+func (c *ClientV2) UpdateWorkload(identifier string, update WorkloadFields) (*Workload, error) {
+	if err := c.requireSaaS(workloadAPIName); err != nil {
+		return nil, err
+	}
+
+	req, err := c.UpdateWorkloadRequest(identifier, update)
+	if err != nil {
+		return nil, err
+	}
+
+	return submitAndUnmarshal[Workload](c, req)
+}
+
+// UpdateWorkloadRequest builds a request to partially update a workload
+// (PATCH). Attributes left unset on update are left unchanged by the server.
+func (c *ClientV2) UpdateWorkloadRequest(identifier string, update WorkloadFields) (*http.Request, error) {
+	if err := validateAuthnDescriptors(update.AuthnDescriptors); err != nil {
+		return nil, err
+	}
+
+	reqURL, err := c.workloadURL(identifier)
+	if err != nil {
+		return nil, err
+	}
+	return newV2JSONRequest(http.MethodPatch, reqURL, update, v2APIHeader)
 }
 
 func (w Workload) Validate() error {
@@ -112,8 +202,30 @@ func (w Workload) Validate() error {
 	if w.Name == "" {
 		errs = append(errs, fmt.Errorf("Missing required attribute Workload Name"))
 	}
-	if len(errs) > 0 {
-		return errors.Join(errs...)
+	return errors.Join(errs...)
+}
+
+// workloadURL builds /workloads/<identifier>[/extra...]. identifier is
+// escaped as a single path segment, so any "/" in it - including the one
+// separating branch from name - becomes %2F rather than a real separator.
+// The server percent-decodes and reads everything after /workloads/ as one
+// identifier, so this reaches the same resource while keeping caller input
+// out of reach of path.Join's "." and ".." resolution. extra components are
+// escaped here too, so callers must not pre-escape them.
+func (c *ClientV2) workloadURL(identifier string, extra ...string) (string, error) {
+	if identifier == "" {
+		return "", fmt.Errorf("Must specify a Workload ID")
 	}
-	return nil
+
+	segments, err := escapePathSegments("Workload URL", append([]string{identifier}, extra...))
+	if err != nil {
+		return "", err
+	}
+	return makeRouterURL(c.config.ApplianceURL, append([]string{"workloads"}, segments...)...).String(), nil
+}
+
+// workloadsURL addresses the /workloads collection rather than a single
+// workload.
+func (c *ClientV2) workloadsURL() string {
+	return makeRouterURL(c.config.ApplianceURL, "workloads").String()
 }

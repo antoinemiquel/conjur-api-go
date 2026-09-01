@@ -47,6 +47,31 @@ func makeRouterURL(base string, components ...string) routerURL {
 	return routerURL(urlBase + "/" + urlPath)
 }
 
+// escapePathSegments turns each caller-supplied value into exactly one path
+// segment for makeRouterURL to join. Characters that could be misparsed as
+// URL delimiters - ' ', '?', '#', '%', '/' among them - are percent-encoded,
+// so a value containing "/" collapses into one segment instead of
+// introducing separators of its own.
+//
+// Empty, "." and ".." values are rejected rather than escaped, since
+// url.PathEscape leaves all three alone and path.Join inside makeRouterURL
+// would then collapse or resolve them - letting caller input address a
+// different resource, or escape the URL prefix entirely. Those strings as
+// substrings are safe, since the surrounding "/" is encoded and path.Join
+// sees no separator to act on.
+//
+// what names the offending input in the error message, e.g. "Workload URL".
+func escapePathSegments(what string, segments []string) ([]string, error) {
+	escaped := make([]string, len(segments))
+	for i, s := range segments {
+		if s == "" || s == "." || s == ".." {
+			return nil, fmt.Errorf("%s components must not be empty, \".\", or \"..\"", what)
+		}
+		escaped[i] = url.PathEscape(s)
+	}
+	return escaped, nil
+}
+
 func (u routerURL) withFormattedQuery(queryFormat string, queryArgs ...interface{}) routerURL {
 	query := fmt.Sprintf(queryFormat, queryArgs...)
 	return routerURL(strings.Join([]string{string(u), query}, "?"))
