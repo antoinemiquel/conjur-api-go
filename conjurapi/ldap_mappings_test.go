@@ -4,12 +4,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/cyberark/conjur-api-go/conjurapi/authn"
 	"github.com/cyberark/conjur-api-go/conjurapi/response"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,50 +37,20 @@ func newLdapTestClient(t *testing.T, applianceURL string) *Client {
 // each time, which is fine for our mock server that always returns it.
 const mockConjurToken = `{"protected":"eyJhbGciOiJjb25qdXIub3JnL3Nsb3NpbG8vdjIiLCJraWQiOiI5M2VjNTEwODRmZTM3Zjc3M2I1ODhlNTYyYWVjZGMxMSJ9","payload":"eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxMDc1MzI1OX0=","signature":"raCufKOf7sKzciZInQTphu1mBbLhAdIJM72ChLB4m5wKWxFnNz_7LawQ9iYEI_we1-tdZtTXoopn_T1qoTplR9_Bo3KkpI5Hj3DB7SmBpR3CSRTnnEwkJ0_aJ8bql5Cbst4i4rSftyEmUqX-FDOqJdAztdi9BUJyLfbeKTW9OGg-QJQzPX1ucB7IpvTFCEjMoO8KUxZpbHj-KpwqAMZRooG4ULBkxp5nSfs-LN27JupU58oRgIfaWASaDmA98O2x6o88MFpxK_M0FeFGuDKewNGrRc8lCOtTQ9cULA080M5CSnruCqu1Qd52r72KIOAfyzNIiBCLTkblz2fZyEkdSKQmZ8J3AakxQE2jyHmMT-eXjfsEIzEt-IRPJIirI3Qm"}`
 
-// newLdapMockServer starts an httptest.Server that handles authn endpoints needed by
-// SubmitRequest, plus delegates all other requests to the provided handler.
-// Returns the server and a fully-authenticated Client pointing at it.
-func newLdapMockServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Client) {
+// newLdapMockServer returns a fully-authenticated Client pointing at a mock
+// server that additionally answers /info with a release new enough for the
+// LDAP mappings API, which its min-version gate checks.
+func newLdapMockServer(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
-	login := testCredential("TEST_LOGIN_LDAP_MOCK")
-	apiKey := testCredential("TEST_API_KEY_LDAP_MOCK")
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/authn/conjur/login") {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(apiKey))
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, "/authn/conjur/"+login+"/authenticate") {
-			body, _ := io.ReadAll(r.Body)
-			if string(body) == apiKey {
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(mockConjurToken))
-			} else {
-				w.WriteHeader(http.StatusUnauthorized)
-			}
-			return
-		}
+	return newAuthenticatedMockServer(t, "", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/info" {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"release":"` + LdapMappingsMinVersion + `","services":{"possum":{"desired":"i","status":"i","err":null,"name":"conjur-possum","version":"` + LdapMappingsMinVersion + `","arch":"amd64"}}}`))
 			return
 		}
 		handler(w, r)
-	}))
-	t.Cleanup(srv.Close)
-
-	tempDir := t.TempDir()
-	config := Config{
-		Account:           "conjur",
-		ApplianceURL:      srv.URL,
-		NetRCPath:         filepath.Join(tempDir, ".netrc"),
-		CredentialStorage: "file",
-	}
-	client, err := NewClientFromKey(config, authn.LoginPair{Login: login, APIKey: apiKey})
-	require.NoError(t, err)
-
-	return srv, client
+	})
 }
 
 // ---- Request builder tests ----
@@ -217,7 +185,7 @@ func TestLdapCreateGroupMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
 			})
@@ -264,7 +232,7 @@ func TestLdapShowGroupMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
 			})
@@ -315,7 +283,7 @@ func TestLdapListGroupMappings(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
 			})
@@ -361,7 +329,7 @@ func TestLdapDeleteGroupMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				if tc.responseBody != "" {
 					w.Write([]byte(tc.responseBody))
@@ -414,7 +382,7 @@ func TestLdapCreateUserMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
 			})
@@ -460,7 +428,7 @@ func TestLdapShowUserMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
 			})
@@ -511,7 +479,7 @@ func TestLdapListUserMappings(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
 			})
@@ -557,7 +525,7 @@ func TestLdapDeleteUserMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+			client := newLdapMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				if tc.responseBody != "" {
 					w.Write([]byte(tc.responseBody))

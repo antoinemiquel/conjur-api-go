@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/cyberark/conjur-api-go/conjurapi/response"
 )
 
 type Owner struct {
@@ -83,12 +81,7 @@ func (c *ClientV2) UpdateBranch(branch Branch) ([]byte, error) {
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return response.DataResponse(resp)
+	return submitAndReadData(c, req)
 }
 
 func (c *ClientV2) DeleteBranch(identifier string) ([]byte, error) {
@@ -101,12 +94,7 @@ func (c *ClientV2) DeleteBranch(identifier string) ([]byte, error) {
 		return nil, err
 	}
 
-	resp, err := c.SubmitRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return response.DataResponse(resp)
+	return submitAndReadData(c, req)
 }
 
 func (c *ClientV2) CreateBranchRequest(branch Branch) (*http.Request, error) {

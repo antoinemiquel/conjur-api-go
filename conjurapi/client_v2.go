@@ -3,6 +3,7 @@ package conjurapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/cyberark/conjur-api-go/conjurapi/response"
@@ -13,12 +14,28 @@ const NotSupportedInConjurCloud = "%s is not supported in Idira Secrets Manager,
 const NotSupportedInConjurEnterprise = "%s is not supported in Idira Secrets Manager/Conjur OSS"
 const NotSupportedInOldVersions = "%s is not supported in Idira Secrets Manager versions older than %s"
 
+// API name labels used in SaaS-support error messages.
+const (
+	workloadAPIName             = "Workload API"
+	issueAPIName                = "Issue API"
+	staticSecretAPIName         = "StaticSecret API"
+	batchRetrieveSecretsAPIName = "V2 Batch Retrieve Secrets API"
+)
+
 type ClientV2 struct {
 	*Client
 }
 
-// submitAndUnmarshal submits req and unmarshals the response body's data
-// payload into T.
+// requireSaaS returns an error naming apiName if the client is not
+// configured against a SaaS appliance.
+func (c *ClientV2) requireSaaS(apiName string) error {
+	if !c.config.IsSaaS() {
+		return fmt.Errorf(NotSupportedInConjurEnterprise, apiName)
+	}
+	return nil
+}
+
+// submitAndUnmarshal submits req and unmarshals the JSON response body into T.
 func submitAndUnmarshal[T any](c *ClientV2, req *http.Request) (*T, error) {
 	resp, err := c.SubmitRequest(req)
 	if err != nil {
@@ -30,6 +47,17 @@ func submitAndUnmarshal[T any](c *ClientV2, req *http.Request) (*T, error) {
 		return nil, err
 	}
 	return &parsedResp, nil
+}
+
+// submitAndReadData submits req and returns the raw response body, for routes
+// whose payload the caller wants unparsed.
+func submitAndReadData(c *ClientV2, req *http.Request) ([]byte, error) {
+	resp, err := c.SubmitRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.DataResponse(resp)
 }
 
 // newV2Request builds a bodiless HTTP request for a v2 API route.

@@ -89,8 +89,8 @@ func (c *ClientV2) CertificateIssueRequest(issuerName string, issue Issue) (*htt
 }
 
 func (c *ClientV2) CertificateIssue(issuerName string, issue Issue) (*CertificateResponse, error) {
-	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "Issue API")
+	if err := c.requireSaaS(issueAPIName); err != nil {
+		return nil, err
 	}
 
 	req, err := c.CertificateIssueRequest(issuerName, issue)
@@ -115,8 +115,8 @@ func (c *ClientV2) CertificateSignRequest(issuerName string, sign Sign) (*http.R
 }
 
 func (c *ClientV2) CertificateSign(issuerName string, sign Sign) (*CertificateResponse, error) {
-	if !c.config.IsSaaS() {
-		return nil, fmt.Errorf(NotSupportedInConjurEnterprise, "Issue API")
+	if err := c.requireSaaS(issueAPIName); err != nil {
+		return nil, err
 	}
 
 	req, err := c.CertificateSignRequest(issuerName, sign)

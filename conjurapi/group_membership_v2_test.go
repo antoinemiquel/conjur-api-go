@@ -80,6 +80,25 @@ func TestClientV2_AddGroupMember(t *testing.T) {
 	}
 }
 
+// TestClientV2_AddGroupMemberServerError asserts that a request the server rejects
+// yields a nil member alongside the error, rather than a pointer to a zero-value
+// GroupMember. Every error case in TestClientV2_AddGroupMember fails client-side in
+// Validate() before a request is sent, so this is the only case that exercises the
+// response path at all.
+func TestClientV2_AddGroupMemberServerError(t *testing.T) {
+	utils, err := NewTestUtils(&Config{})
+	require.NoError(t, err)
+	_, err = utils.Setup(emptyGroupPolicy)
+	require.NoError(t, err)
+	conjur := utils.Client().V2()
+
+	// emptyGroupPolicy creates 'test-users', so this group does not exist.
+	member, err := conjur.AddGroupMember("data/test/no-such-group", GroupMember{ID: "data/test/bob", Kind: "host"})
+
+	require.Error(t, err, "adding a member to a nonexistent group should fail")
+	assert.Nil(t, member, "member must be nil when the request fails, not a pointer to a zero-value struct")
+}
+
 func TestClientV2_RemoveGroupMember(t *testing.T) {
 	utils, err := NewTestUtils(&Config{})
 	require.NoError(t, err)
