@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.15.7] - 2026-09-02
+
 ### Added
 - `ClientV2.GetWorkload` reads a workload.
 - `ClientV2.UpdateWorkload` updates a workload.
